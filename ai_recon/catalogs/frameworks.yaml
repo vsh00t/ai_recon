@@ -1,0 +1,385 @@
+# frameworks.yaml — Python package to AI framework mapping
+# Used to identify AI frameworks in dependency manifests, import statements,
+# and installed package lists discovered during reconnaissance.
+---
+
+frameworks:
+
+  # ── Orchestration ──────────────────────────────────────────────────────────
+
+  - package_name: langchain
+    canonical_name: "LangChain"
+    category: orchestration
+    pypi_name: langchain
+    import_names:
+      - langchain
+      - langchain_core
+      - langchain_community
+    version_attr: "langchain.__version__"
+    risk_notes: >
+      LangChain chains and agents often pass user-controlled input directly into
+      prompts. LCEL pipelines may expose intermediate chain outputs. Check for
+      prompt injection via input variables and for verbose=True debug leaks.
+
+  - package_name: langgraph
+    canonical_name: "LangGraph"
+    category: orchestration
+    pypi_name: langgraph
+    import_names:
+      - langgraph
+    version_attr: "langgraph.__version__"
+    risk_notes: >
+      Stateful multi-agent orchestration with persistent checkpoints. Graph
+      state may accumulate sensitive context across turns. Examine StateGraph
+      node definitions and tool-calling edges for privilege escalation paths.
+
+  # ── RAG Frameworks ─────────────────────────────────────────────────────────
+
+  - package_name: llama_index
+    canonical_name: "LlamaIndex"
+    category: rag
+    pypi_name: llama-index
+    import_names:
+      - llama_index
+    version_attr: "llama_index.__version__"
+    risk_notes: >
+      RAG pipeline connecting document stores to LLMs. VectorStoreIndex queries
+      may leak document metadata. ServiceContext exposes model and embedding
+      config. Check query engine similarity_top_k and response synthesizer.
+
+  - package_name: llama-index-core
+    canonical_name: "LlamaIndex Core"
+    category: rag
+    pypi_name: llama-index-core
+    import_names:
+      - llama_index.core
+    version_attr: "llama_index.core.__version__"
+    risk_notes: >
+      Same risk surface as llama_index. Core package post-v0.10 restructuring.
+      Check Settings object for global model/embedding configuration exposure.
+
+  - package_name: haystack-ai
+    canonical_name: "Haystack"
+    category: rag
+    pypi_name: haystack-ai
+    import_names:
+      - haystack
+    version_attr: "haystack.__version__"
+    risk_notes: >
+      Haystack pipelines wire document stores to generators. DocumentStore
+      filters may be injectable. PromptBuilder Jinja2 templates can be
+      manipulated if user data flows into template variables.
+
+  - package_name: farm-haystack
+    canonical_name: "Haystack (Legacy)"
+    category: rag
+    pypi_name: farm-haystack
+    import_names:
+      - haystack
+    version_attr: "haystack.__version__"
+    risk_notes: >
+      Legacy Haystack v1.x. REST API endpoints (/query, /documents) often
+      exposed. Elasticsearch/OpenSearch BM25 retrievers may be exploited for
+      document enumeration if filters are not enforced.
+
+  # ── Agent Frameworks ───────────────────────────────────────────────────────
+
+  - package_name: semantic_kernel
+    canonical_name: "Semantic Kernel"
+    category: orchestration
+    pypi_name: semantic-kernel
+    import_names:
+      - semantic_kernel
+    version_attr: "semantic_kernel.__version__"
+    risk_notes: >
+      Microsoft's orchestration SDK. Kernel plugins expose native functions
+      callable by the model. Planner components may auto-invoke dangerous tools.
+      Memory stores (volatile, semantic, episodic) can leak cross-session data.
+
+  - package_name: dspy-ai
+    canonical_name: "DSPy"
+    category: orchestration
+    pypi_name: dspy-ai
+    import_names:
+      - dspy
+    version_attr: "dspy.__version__"
+    risk_notes: >
+      Stanford's programmatic LLM framework. Compiled programs embed optimized
+      prompts that may contain training data artifacts. Teleprompter/optimizer
+      artifacts in .pkl files can reveal proprietary prompt strategies.
+
+  - package_name: crewai
+    canonical_name: "CrewAI"
+    category: multi-agent
+    pypi_name: crewai
+    import_names:
+      - crewai
+    version_attr: "crewai.__version__"
+    risk_notes: >
+      Multi-agent framework with role-based agents. Agent backstories and goals
+      are injected into system prompts verbatim. Tool definitions and allowed
+      actions may expose attack surface for prompt injection via tool outputs.
+
+  - package_name: pyautogen
+    canonical_name: "AutoGen"
+    category: multi-agent
+    pypi_name: pyautogen
+    import_names:
+      - autogen
+    version_attr: "autogen.__version__"
+    risk_notes: >
+      Microsoft multi-agent conversations. Code execution via UserProxyAgent
+      may run arbitrary code in Docker or locally. GroupChat may leak
+      inter-agent messages. Check is_termination_msg bypass conditions.
+
+  - package_name: autogen
+    canonical_name: "AutoGen (microsoft-autogen)"
+    category: multi-agent
+    pypi_name: autogen
+    import_names:
+      - autogen
+    version_attr: "autogen.__version__"
+    risk_notes: >
+      Same risk surface as pyautogen. Verify which AutoGen variant is installed
+      (community vs Microsoft). Code interpreter sandboxing must be audited.
+
+  # ── Observability ──────────────────────────────────────────────────────────
+
+  - package_name: agentops
+    canonical_name: "AgentOps"
+    category: observability
+    pypi_name: agentops
+    import_names:
+      - agentops
+    version_attr: "agentops.__version__"
+    risk_notes: >
+      Telemetry SDK that records all LLM calls to AgentOps cloud. Full prompt
+      and response content transmitted to third party. Check AGENTOPS_API_KEY
+      in environment and whether PII filtering is configured.
+
+  # ── Structured Output ──────────────────────────────────────────────────────
+
+  - package_name: instructor
+    canonical_name: "Instructor"
+    category: structured-output
+    pypi_name: instructor
+    import_names:
+      - instructor
+    version_attr: "instructor.__version__"
+    risk_notes: >
+      Wraps LLM clients for Pydantic-validated structured output. Retry logic
+      (max_retries) may send multiple near-identical prompts, increasing token
+      cost and leak surface. ValidationError messages included in retry prompts.
+
+  - package_name: guidance
+    canonical_name: "Guidance"
+    category: structured-output
+    pypi_name: guidance
+    import_names:
+      - guidance
+    version_attr: "guidance.__version__"
+    risk_notes: >
+      Constrained generation library. Program templates compiled to model
+      logit biases. Server mode exposes HTTP endpoint for template execution.
+      Template injection possible if user input flows into guidance programs.
+
+  - package_name: marvin
+    canonical_name: "Marvin"
+    category: structured-output
+    pypi_name: marvin
+    import_names:
+      - marvin
+    version_attr: "marvin.__version__"
+    risk_notes: >
+      AI function decorator library. @marvin.fn decorated functions encode
+      their docstrings as prompts. Classification and extraction tasks may
+      leak schema structure. Settings stored in MARVIN_* env vars.
+
+  - package_name: outlines
+    canonical_name: "Outlines"
+    category: structured-output
+    pypi_name: outlines
+    import_names:
+      - outlines
+    version_attr: "outlines.__version__"
+    risk_notes: >
+      Structured generation via regex/JSON Schema constrained sampling.
+      Typically used with local models (transformers, llama.cpp). Grammar
+      files may reveal expected output schemas for sensitive operations.
+
+  - package_name: pydantic_ai
+    canonical_name: "PydanticAI"
+    category: orchestration
+    pypi_name: pydantic-ai
+    import_names:
+      - pydantic_ai
+    version_attr: "pydantic_ai.__version__"
+    risk_notes: >
+      Type-safe agent framework from Pydantic team. Agent system prompts
+      registered via decorators may be introspectable. Dependency injection
+      model can leak context objects. Run history stored in-memory by default.
+
+  # ── Raw Provider SDKs ──────────────────────────────────────────────────────
+
+  - package_name: openai
+    canonical_name: "OpenAI Python SDK"
+    category: sdk
+    pypi_name: openai
+    import_names:
+      - openai
+    version_attr: "openai.__version__"
+    risk_notes: >
+      Official OpenAI client. OPENAI_API_KEY in environment or config.
+      base_url override enables routing to non-OpenAI backends. Check for
+      azure_endpoint and api_version indicating Azure OpenAI deployment.
+
+  - package_name: anthropic
+    canonical_name: "Anthropic Python SDK"
+    category: sdk
+    pypi_name: anthropic
+    import_names:
+      - anthropic
+    version_attr: "anthropic.__version__"
+    risk_notes: >
+      Official Anthropic client. ANTHROPIC_API_KEY in environment. Base URL
+      override may indicate proxy. beta headers reveal feature usage (tools,
+      computer-use, interleaved-thinking). max_tokens cap indicates cost controls.
+
+  - package_name: google-generativeai
+    canonical_name: "Google Generative AI SDK"
+    category: sdk
+    pypi_name: google-generativeai
+    import_names:
+      - google.generativeai
+    version_attr: "google.generativeai.__version__"
+    risk_notes: >
+      Google Gemini API client. GOOGLE_API_KEY or GEMINI_API_KEY in env.
+      Safety settings configuration reveals which harm categories are suppressed.
+      grounding tool usage exposes which Google Search results are injected.
+
+  - package_name: cohere
+    canonical_name: "Cohere Python SDK"
+    category: sdk
+    pypi_name: cohere
+    import_names:
+      - cohere
+    version_attr: "cohere.__version__"
+    risk_notes: >
+      Cohere client. CO_API_KEY in environment. Connectors in chat endpoint
+      indicate RAG sources. Document list in API response reveals retrieval corpus.
+
+  - package_name: mistralai
+    canonical_name: "Mistral AI Python SDK"
+    category: sdk
+    pypi_name: mistralai
+    import_names:
+      - mistralai
+    version_attr: "mistralai.__version__"
+    risk_notes: >
+      Mistral API client. MISTRAL_API_KEY in environment. Function calling
+      and code interpreter tool use reveal agentic surface.
+
+  - package_name: boto3
+    canonical_name: "AWS SDK (boto3 / Bedrock)"
+    category: sdk
+    pypi_name: boto3
+    import_names:
+      - boto3
+      - botocore
+    version_attr: "boto3.__version__"
+    risk_notes: >
+      AWS SDK used for Bedrock model invocations. AWS credentials in
+      ~/.aws/credentials or environment (AWS_ACCESS_KEY_ID). bedrock-runtime
+      InvokeModel/InvokeModelWithResponseStream reveals model IDs and regions.
+      IAM roles may grant broader AWS access beyond Bedrock.
+
+  # ── Inference Servers ──────────────────────────────────────────────────────
+
+  - package_name: vllm
+    canonical_name: "vLLM"
+    category: inference
+    pypi_name: vllm
+    import_names:
+      - vllm
+    version_attr: "vllm.__version__"
+    risk_notes: >
+      High-throughput inference server with OpenAI-compatible API. /v1/models
+      endpoint enumerates loaded models. Tensor parallel and pipeline parallel
+      configs in serve args. Multi-LoRA serving may expose adapter identities.
+
+  - package_name: text-generation-inference
+    canonical_name: "Text Generation Inference (TGI)"
+    category: inference
+    pypi_name: text-generation
+    import_names:
+      - text_generation
+    version_attr: "text_generation.__version__"
+    risk_notes: >
+      HuggingFace inference server. /info endpoint leaks model_id, revision,
+      max_input_length, max_total_tokens. Docker label com.huggingface.model
+      reveals model. Admin endpoints may be unauthenticated in default config.
+
+  # ── HuggingFace Training / Inference ──────────────────────────────────────
+
+  - package_name: transformers
+    canonical_name: "HuggingFace Transformers"
+    category: inference
+    pypi_name: transformers
+    import_names:
+      - transformers
+    version_attr: "transformers.__version__"
+    risk_notes: >
+      Local model inference and training library. Model cache in ~/.cache/huggingface
+      reveals downloaded models. AutoModel/AutoTokenizer usage with from_pretrained
+      may expose model IDs. TRANSFORMERS_CACHE env var reveals storage path.
+
+  - package_name: accelerate
+    canonical_name: "HuggingFace Accelerate"
+    category: inference
+    pypi_name: accelerate
+    import_names:
+      - accelerate
+    version_attr: "accelerate.__version__"
+    risk_notes: >
+      Distributed training and inference. accelerate config reveals compute
+      infrastructure (num GPUs, mixed precision, DeepSpeed config). May indicate
+      on-premise GPU cluster presence.
+
+  - package_name: peft
+    canonical_name: "PEFT (Parameter-Efficient Fine-Tuning)"
+    category: inference
+    pypi_name: peft
+    import_names:
+      - peft
+    version_attr: "peft.__version__"
+    risk_notes: >
+      LoRA/QLoRA adapter library. Presence indicates fine-tuned model deployment.
+      Adapter configs reveal base model and training task. Fine-tuning on
+      proprietary data may expose training set membership via membership inference.
+
+  # ── Embeddings ─────────────────────────────────────────────────────────────
+
+  - package_name: sentence-transformers
+    canonical_name: "Sentence Transformers"
+    category: embedding
+    pypi_name: sentence-transformers
+    import_names:
+      - sentence_transformers
+    version_attr: "sentence_transformers.__version__"
+    risk_notes: >
+      Local embedding model library. Presence confirms on-premise embedding
+      generation. Model name from SentenceTransformer constructor reveals
+      embedding dimensionality and similarity metric. BERT-based models may
+      be vulnerable to token smuggling attacks.
+
+  - package_name: FlagEmbeddingModel
+    canonical_name: "FlagEmbedding (BGE)"
+    category: embedding
+    pypi_name: FlagEmbedding
+    import_names:
+      - FlagEmbedding
+    version_attr: "FlagEmbedding.__version__"
+    risk_notes: >
+      BGE embedding models from BAAI. Reranker variants (FlagReranker) reveal
+      two-stage retrieval pipeline. use_fp16 parameter indicates GPU inference.
+      instruction parameter customization may affect embedding space boundaries.

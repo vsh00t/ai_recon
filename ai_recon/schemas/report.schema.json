@@ -1,0 +1,650 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-recon.io/schemas/report.schema.json",
+  "title": "ai-recon Assessment Report",
+  "description": "JSON Schema for the ai-recon Report model output. Covers all fields produced by the Report Pydantic model after a completed assessment run.",
+  "type": "object",
+  "required": [
+    "report_id",
+    "schema_version",
+    "generated_at",
+    "engagement",
+    "profile_name",
+    "target",
+    "summary",
+    "findings"
+  ],
+  "additionalProperties": false,
+  "properties": {
+
+    "report_id": {
+      "type": "string",
+      "description": "Unique identifier for this report instance. UUIDv4 format.",
+      "format": "uuid",
+      "examples": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"]
+    },
+
+    "schema_version": {
+      "type": "string",
+      "description": "Report schema version.",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "examples": ["1.0"]
+    },
+
+    "generated_at": {
+      "type": "string",
+      "description": "ISO 8601 UTC timestamp when the report was generated.",
+      "format": "date-time",
+      "examples": ["2025-06-15T14:30:00Z"]
+    },
+
+    "engagement": {
+      "type": "object",
+      "description": "Engagement metadata copied from scope.yaml for audit trail.",
+      "required": ["name", "authorization_ref"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Engagement name."
+        },
+        "authorization_ref": {
+          "type": "string",
+          "description": "Authorization document reference."
+        },
+        "contact_email": {
+          "type": "string",
+          "description": "Authorizing contact email.",
+          "format": "email"
+        },
+        "classification": {
+          "type": "string",
+          "enum": ["public", "internal", "confidential", "restricted"],
+          "description": "Data classification of this report."
+        }
+      }
+    },
+
+    "profile_name": {
+      "type": "string",
+      "description": "Name of the profile used for this assessment run.",
+      "examples": ["blackbox_saas", "rag_audit", "internal_enterprise"]
+    },
+
+    "target": {
+      "type": "object",
+      "description": "Information about the assessed target endpoint.",
+      "required": ["url"],
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Primary target URL."
+        },
+        "host": {
+          "type": "string",
+          "description": "Resolved hostname or IP address."
+        },
+        "port": {
+          "type": "integer",
+          "description": "TCP port of the target.",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "tls": {
+          "type": "boolean",
+          "description": "Whether TLS was used."
+        },
+        "resolved_ip": {
+          "type": "string",
+          "description": "Resolved IP address of the target."
+        },
+        "cdn_detected": {
+          "type": "boolean",
+          "description": "Whether a CDN was detected in front of the target."
+        },
+        "cdn_vendor": {
+          "type": ["string", "null"],
+          "description": "CDN vendor if detected.",
+          "examples": ["Cloudflare", "Fastly", "AWS CloudFront", null]
+        },
+        "gateway_type": {
+          "type": ["string", "null"],
+          "description": "API gateway type if detected.",
+          "examples": ["AWS API Gateway", "Kong", "Apigee", "Azure APIM", null]
+        }
+      }
+    },
+
+    "summary": {
+      "type": "object",
+      "description": "Executive summary of findings counts and key intelligence.",
+      "required": ["finding_counts", "intrusiveness_used", "techniques_run"],
+      "additionalProperties": false,
+      "properties": {
+        "finding_counts": {
+          "type": "object",
+          "description": "Count of findings by severity level.",
+          "required": ["critical", "high", "medium", "low", "info", "total"],
+          "additionalProperties": false,
+          "properties": {
+            "critical": {"type": "integer", "minimum": 0},
+            "high": {"type": "integer", "minimum": 0},
+            "medium": {"type": "integer", "minimum": 0},
+            "low": {"type": "integer", "minimum": 0},
+            "info": {"type": "integer", "minimum": 0},
+            "total": {"type": "integer", "minimum": 0}
+          }
+        },
+        "intrusiveness_used": {
+          "type": "string",
+          "enum": ["info", "low", "medium", "high"],
+          "description": "Maximum intrusiveness level actually exercised during the run."
+        },
+        "techniques_run": {
+          "type": "array",
+          "description": "List of technique IDs that were executed.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "techniques_skipped": {
+          "type": "array",
+          "description": "Techniques that were configured but skipped (intrusiveness ceiling, auth failure, etc.).",
+          "items": {
+            "type": "object",
+            "required": ["technique_id", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "technique_id": {"type": "string"},
+              "reason": {"type": "string"}
+            }
+          }
+        },
+        "duration_seconds": {
+          "type": "number",
+          "description": "Total assessment duration in seconds.",
+          "minimum": 0
+        },
+        "vendor_identified": {
+          "type": ["string", "null"],
+          "description": "Vendor ID if model identity was determined.",
+          "examples": ["anthropic", "openai", "meta-llama", null]
+        },
+        "model_family": {
+          "type": ["string", "null"],
+          "description": "Specific model family if identified.",
+          "examples": ["claude-4-sonnet", "gpt-4o", null]
+        },
+        "model_confidence": {
+          "type": ["number", "null"],
+          "description": "Confidence score (0-1) for the model identification.",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "cutoff_estimated": {
+          "type": ["string", "null"],
+          "description": "Estimated knowledge cutoff date in YYYY-MM format.",
+          "pattern": "^[0-9]{4}-[0-9]{2}$",
+          "examples": ["2024-10", "2025-01"]
+        },
+        "inference_server": {
+          "type": ["string", "null"],
+          "description": "Inference server identified if applicable.",
+          "examples": ["ollama", "vllm", "tgi", null]
+        },
+        "rag_detected": {
+          "type": "boolean",
+          "description": "Whether a RAG pipeline was detected.",
+          "default": false
+        },
+        "vector_db_detected": {
+          "type": ["string", "null"],
+          "description": "Vector database identified if RAG was detected.",
+          "examples": ["chromadb", "pinecone", "qdrant", null]
+        },
+        "mcp_detected": {
+          "type": "boolean",
+          "description": "Whether MCP server capabilities were detected.",
+          "default": false
+        },
+        "honeypot_signals": {
+          "type": "integer",
+          "description": "Number of honeypot/canary signals detected.",
+          "minimum": 0,
+          "default": 0
+        }
+      }
+    },
+
+    "findings": {
+      "type": "array",
+      "description": "Ordered list of findings from most severe to least severe.",
+      "items": {
+        "$ref": "#/definitions/Finding"
+      }
+    },
+
+    "fingerprint": {
+      "type": "object",
+      "description": "Aggregated fingerprint intelligence gathered during the assessment.",
+      "additionalProperties": false,
+      "properties": {
+        "vendor": {
+          "type": ["string", "null"],
+          "description": "Vendor ID from vendors.yaml.",
+          "examples": ["anthropic", "openai", "meta-llama"]
+        },
+        "model_family": {
+          "type": ["string", "null"],
+          "description": "Specific model family string.",
+          "examples": ["claude-4.6", "gpt-4o", "llama-3.1"]
+        },
+        "confidence": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence score for vendor/model identification."
+        },
+        "matched_patterns": {
+          "type": "array",
+          "description": "Self-identification regex patterns that matched.",
+          "items": {"type": "string"}
+        },
+        "knowledge_cutoff": {
+          "type": ["string", "null"],
+          "description": "Estimated knowledge cutoff (YYYY-MM).",
+          "pattern": "^[0-9]{4}-[0-9]{2}$"
+        },
+        "context_window_tokens": {
+          "type": ["integer", "null"],
+          "description": "Measured context window in tokens.",
+          "minimum": 0
+        },
+        "behavior_signature": {
+          "type": "object",
+          "description": "Observed behavioral characteristics.",
+          "additionalProperties": false,
+          "properties": {
+            "verbosity": {
+              "type": "string",
+              "enum": ["low", "medium", "high"]
+            },
+            "docstrings": {
+              "type": "string",
+              "enum": ["rare", "medium", "common"]
+            },
+            "edge_cases": {
+              "type": "string",
+              "enum": ["rare", "medium", "common"]
+            },
+            "arithmetic_accuracy": {
+              "type": "string",
+              "enum": ["low", "medium", "high"]
+            }
+          }
+        },
+        "frameworks_detected": {
+          "type": "array",
+          "description": "AI frameworks detected in the target environment.",
+          "items": {
+            "type": "object",
+            "required": ["package_name", "canonical_name", "category"],
+            "additionalProperties": false,
+            "properties": {
+              "package_name": {"type": "string"},
+              "canonical_name": {"type": "string"},
+              "category": {"type": "string"},
+              "version": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "inference_server": {
+          "type": ["string", "null"],
+          "description": "Inference server ID from inference_servers.yaml.",
+          "examples": ["ollama", "vllm", "tgi", "lmstudio"]
+        },
+        "vector_db": {
+          "type": ["string", "null"],
+          "description": "Vector database ID from vector_dbs.yaml.",
+          "examples": ["chromadb", "pinecone", "qdrant"]
+        },
+        "http_headers": {
+          "type": "object",
+          "description": "Interesting HTTP response headers captured.",
+          "additionalProperties": {"type": "string"}
+        },
+        "tls_info": {
+          "type": "object",
+          "description": "TLS certificate metadata.",
+          "additionalProperties": false,
+          "properties": {
+            "issuer": {"type": ["string", "null"]},
+            "subject": {"type": ["string", "null"]},
+            "san": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "not_before": {"type": ["string", "null"]},
+            "not_after": {"type": ["string", "null"]},
+            "cipher_suite": {"type": ["string", "null"]},
+            "tls_version": {"type": ["string", "null"]}
+          }
+        }
+      }
+    },
+
+    "technique_results": {
+      "type": "array",
+      "description": "Per-technique execution results including timing and raw output.",
+      "items": {
+        "$ref": "#/definitions/TechniqueResult"
+      }
+    },
+
+    "raw_probes": {
+      "type": "array",
+      "description": "Raw request/response pairs captured during the assessment. Only included when include_raw_responses is true in scope options.",
+      "items": {
+        "$ref": "#/definitions/RawProbe"
+      }
+    },
+
+    "metadata": {
+      "type": "object",
+      "description": "Report metadata and tooling information.",
+      "additionalProperties": false,
+      "properties": {
+        "tool": {
+          "type": "string",
+          "description": "Tool name.",
+          "examples": ["ai-recon"]
+        },
+        "tool_version": {
+          "type": "string",
+          "description": "Tool version string.",
+          "examples": ["0.3.0"]
+        },
+        "operator": {
+          "type": "string",
+          "description": "Email or identifier of the operator who ran the assessment.",
+          "examples": ["jorge@moya.ec"]
+        },
+        "scope_file": {
+          "type": "string",
+          "description": "Path to the scope.yaml file used.",
+          "examples": ["./scope.yaml"]
+        },
+        "pii_redacted": {
+          "type": "boolean",
+          "description": "Whether PII redaction was applied to the report."
+        },
+        "checksum": {
+          "type": "string",
+          "description": "SHA-256 hash of the report content (excluding this field) for integrity verification.",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  },
+
+  "definitions": {
+
+    "Finding": {
+      "type": "object",
+      "required": [
+        "finding_id",
+        "technique_id",
+        "title",
+        "severity",
+        "score",
+        "description"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "description": "Unique finding identifier within this report. UUIDv4.",
+          "format": "uuid"
+        },
+        "technique_id": {
+          "type": "string",
+          "description": "ID of the technique that produced this finding.",
+          "examples": ["active.model_identity", "active.rag_mapping", "active.guardrail_probe"]
+        },
+        "title": {
+          "type": "string",
+          "description": "Short descriptive title for the finding.",
+          "minLength": 5,
+          "maxLength": 256,
+          "examples": ["Model Identity Confirmed: Claude 4.6 (Anthropic)", "PII Leaked via RAG Response"]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low", "info"],
+          "description": "Final severity label after scoring and multipliers."
+        },
+        "score": {
+          "type": "number",
+          "description": "Final numeric severity score (0-10) after applying base score and multipliers.",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "base_score": {
+          "type": "number",
+          "description": "Base score before multipliers.",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "multipliers_applied": {
+          "type": "array",
+          "description": "List of severity multiplier IDs applied to this finding.",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["rag_with_pii", "pii_leaked"], ["mcp_dangerous_tool"]]
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of the finding, including what was observed and its significance.",
+          "minLength": 10
+        },
+        "evidence": {
+          "type": "object",
+          "description": "Supporting evidence for the finding.",
+          "additionalProperties": false,
+          "properties": {
+            "request": {
+              "type": ["string", "null"],
+              "description": "Redacted request that produced the evidence."
+            },
+            "response": {
+              "type": ["string", "null"],
+              "description": "Redacted response containing the evidence."
+            },
+            "matched_pattern": {
+              "type": ["string", "null"],
+              "description": "Regex or string pattern that matched."
+            },
+            "matched_text": {
+              "type": ["string", "null"],
+              "description": "Text that matched the pattern (potentially redacted)."
+            },
+            "screenshot_path": {
+              "type": ["string", "null"],
+              "description": "Path to supporting screenshot if applicable."
+            }
+          }
+        },
+        "recommendation": {
+          "type": "string",
+          "description": "Actionable remediation recommendation for this finding.",
+          "examples": [
+            "Implement a custom system prompt that instructs the model to not disclose its identity.",
+            "Configure row-level security on the connected database to prevent cross-user data access."
+          ]
+        },
+        "references": {
+          "type": "array",
+          "description": "Relevant references (CVEs, papers, documentation).",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "cwe_id": {
+          "type": ["string", "null"],
+          "description": "CWE identifier if applicable.",
+          "pattern": "^CWE-[0-9]+$",
+          "examples": ["CWE-200", "CWE-94"]
+        },
+        "tags": {
+          "type": "array",
+          "description": "Descriptive tags for filtering and categorization.",
+          "items": {"type": "string"},
+          "examples": [["rag", "pii"], ["mcp", "rce"], ["identity", "fingerprint"]]
+        },
+        "discovered_at": {
+          "type": "string",
+          "description": "ISO 8601 UTC timestamp when this finding was discovered.",
+          "format": "date-time"
+        },
+        "false_positive_likelihood": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Analyst assessment of false positive likelihood.",
+          "default": "low"
+        }
+      }
+    },
+
+    "TechniqueResult": {
+      "type": "object",
+      "required": ["technique_id", "status", "started_at", "finished_at"],
+      "additionalProperties": false,
+      "properties": {
+        "technique_id": {
+          "type": "string",
+          "description": "Technique identifier."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["success", "partial", "failed", "skipped", "timeout"],
+          "description": "Execution outcome."
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "finding_ids": {
+          "type": "array",
+          "description": "UUIDs of findings produced by this technique.",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "requests_made": {
+          "type": "integer",
+          "description": "Number of HTTP requests made by this technique.",
+          "minimum": 0
+        },
+        "tokens_consumed": {
+          "type": ["integer", "null"],
+          "description": "Estimated tokens consumed (input + output) if measurable.",
+          "minimum": 0
+        },
+        "error_message": {
+          "type": ["string", "null"],
+          "description": "Error message if status is failed or partial."
+        },
+        "skip_reason": {
+          "type": ["string", "null"],
+          "description": "Reason for skipping if status is skipped."
+        }
+      }
+    },
+
+    "RawProbe": {
+      "type": "object",
+      "required": ["probe_id", "technique_id", "timestamp", "request"],
+      "additionalProperties": false,
+      "properties": {
+        "probe_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "technique_id": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "request": {
+          "type": "object",
+          "description": "HTTP request details.",
+          "additionalProperties": false,
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {"type": "string"}
+            },
+            "body": {
+              "type": ["string", "null"]
+            }
+          }
+        },
+        "response": {
+          "type": ["object", "null"],
+          "description": "HTTP response details.",
+          "additionalProperties": false,
+          "properties": {
+            "status_code": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {"type": "string"}
+            },
+            "body": {
+              "type": ["string", "null"]
+            },
+            "latency_ms": {
+              "type": "number",
+              "minimum": 0
+            },
+            "ttft_ms": {
+              "type": ["number", "null"],
+              "minimum": 0,
+              "description": "Time to first token in milliseconds (streaming responses)."
+            }
+          }
+        },
+        "pii_redacted": {
+          "type": "boolean",
+          "description": "Whether PII patterns were found and redacted in this probe."
+        }
+      }
+    }
+  }
+}

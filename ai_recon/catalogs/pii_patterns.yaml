@@ -1,0 +1,179 @@
+# pii_patterns.yaml — PII detection regex patterns for log redaction
+# Used by the log sanitizer and output scrubber to detect and redact
+# personally identifiable information and sensitive credentials before
+# storing findings or transmitting data.
+#
+# All regex patterns are Python re module compatible.
+# Test with: re.search(pattern, text, re.IGNORECASE)
+---
+
+pii_patterns:
+
+  - name: email
+    description: "Email address (RFC5321-ish)"
+    regex: >-
+      (?:[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-zA-Z0-9-]*[a-zA-Z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])
+    redact_with: "[REDACTED-EMAIL]"
+    severity: medium
+    notes: "Matches most valid email addresses including quoted local parts and IP literals"
+
+  - name: phone_us
+    description: "US/North American phone number (+1 format and variants)"
+    regex: >-
+      (?:\+?1[-.\s]?)?(?:\(?[2-9][0-9]{2}\)?[-.\s]?)[2-9][0-9]{2}[-.\s]?[0-9]{4}
+    redact_with: "[REDACTED-PHONE]"
+    severity: medium
+    notes: "Matches +1 (555) 867-5309, 555.867.5309, 18005551234, etc."
+
+  - name: ssn
+    description: "US Social Security Number (XXX-XX-XXXX)"
+    regex: >-
+      (?!000|666|9\d{2})\d{3}[-\s]?(?!00)\d{2}[-\s]?(?!0{4})\d{4}
+    redact_with: "[REDACTED-SSN]"
+    severity: high
+    notes: >
+      Excludes invalid SSN ranges (000, 666, 900-999 area numbers,
+      00 group, 0000 serial). Context-aware: flag only when near
+      words like 'SSN', 'social security', 'tax ID'.
+
+  - name: credit_card
+    description: "Payment card number (Luhn-pattern, 13-19 digits with optional separators)"
+    regex: >-
+      (?:4[0-9]{12}(?:[0-9]{3})?|[25][1-7][0-9]{14}|6(?:011|5[0-9]{2})[0-9]{12}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11}|(?:2131|1800|35\d{3})\d{11})(?:[-\s][0-9]{4}){0,3}
+    redact_with: "[REDACTED-CARD]"
+    severity: high
+    notes: >
+      Covers Visa (4xxx), Mastercard (51-55xx, 2221-2720), Amex (34xx, 37xx),
+      Discover (6011, 65xx), Diners (300-305, 36xx, 38xx), JCB.
+      Luhn validation should be applied post-match to reduce false positives.
+
+  - name: api_key_generic
+    description: "Generic API key patterns (hex, sk-, key-, Bearer tokens)"
+    regex: >-
+      (?:(?:api[_-]?key|apikey|api[_-]?token|access[_-]?token|auth[_-]?token|secret[_-]?key)[\s]*[=:\"'\s][\s]*)?(?:sk-[a-zA-Z0-9]{20,}|key-[a-zA-Z0-9]{20,}|[a-f0-9]{32,64}|[A-Za-z0-9+/]{40,}={0,2})
+    redact_with: "[REDACTED-API-KEY]"
+    severity: high
+    notes: >
+      Matches sk-... (OpenAI style), key-... patterns, 32-64 char hex strings,
+      and base64 encoded tokens of 40+ chars. Context clues (api_key=) increase
+      confidence. May produce false positives on long hash values.
+
+  - name: openai_api_key
+    description: "OpenAI API key (sk-... format)"
+    regex: >-
+      \bsk-(?:proj-)?[a-zA-Z0-9]{20,}(?:T3BlbkFJ[a-zA-Z0-9]{20,})?\b
+    redact_with: "[REDACTED-OPENAI-KEY]"
+    severity: high
+    notes: "Matches classic sk-... and project-scoped sk-proj-... keys"
+
+  - name: anthropic_api_key
+    description: "Anthropic API key (sk-ant-... format)"
+    regex: >-
+      \bsk-ant-(?:api03-)?[a-zA-Z0-9_-]{20,}\b
+    redact_with: "[REDACTED-ANTHROPIC-KEY]"
+    severity: high
+    notes: "Matches Anthropic API keys in sk-ant-api03-... format"
+
+  - name: aws_access_key
+    description: "AWS access key ID"
+    regex: >-
+      \b(AKIA|AGPA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}\b
+    redact_with: "[REDACTED-AWS-ACCESS-KEY]"
+    severity: high
+    notes: >
+      Matches all AWS key ID prefixes: AKIA (long-term IAM), ASIA (temporary
+      STS), AGPA (group), AIPA (instance profile), ANPA (policy), ANVA (MFA).
+
+  - name: aws_secret_key
+    description: "AWS secret access key"
+    regex: >-
+      (?i)(?:aws[_-]?secret[_-]?(?:access[_-]?)?key|secret[_-]?access[_-]?key)[\s]*[=:\"'\s][\s]*([A-Za-z0-9/+=]{40})\b
+    redact_with: "[REDACTED-AWS-SECRET-KEY]"
+    severity: critical
+    notes: >
+      40-character base64-ish string in context of 'secret_access_key' label.
+      Standalone 40-char strings are too ambiguous; require context.
+
+  - name: jwt
+    description: "JSON Web Token"
+    regex: >-
+      \beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b
+    redact_with: "[REDACTED-JWT]"
+    severity: high
+    notes: >
+      All JWTs start with eyJ (base64url of '{"'). Three-part dot-separated
+      structure. May contain identity claims, permissions, and session data
+      in the (unencrypted) payload section.
+
+  - name: google_api_key
+    description: "Google API key (AIza... format)"
+    regex: >-
+      \bAIza[a-zA-Z0-9_-]{35}\b
+    redact_with: "[REDACTED-GOOGLE-KEY]"
+    severity: high
+    notes: "Google API keys start with AIza followed by 35 alphanumeric/dash/underscore chars"
+
+  - name: github_token
+    description: "GitHub personal access token or app token"
+    regex: >-
+      \b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[a-zA-Z0-9]{36,255}\b
+    redact_with: "[REDACTED-GITHUB-TOKEN]"
+    severity: high
+    notes: >
+      Covers ghp_ (personal), gho_ (OAuth), ghu_ (user-to-server), ghs_ (server-to-server),
+      ghr_ (refresh), and legacy github_pat_ prefixes.
+
+  - name: slack_token
+    description: "Slack API token"
+    regex: >-
+      \b(?:xox[baprs]-[a-zA-Z0-9-]{10,})\b
+    redact_with: "[REDACTED-SLACK-TOKEN]"
+    severity: high
+    notes: "Covers xoxb (bot), xoxa (app), xoxp (user), xoxr (refresh), xoxs (workspace)"
+
+  - name: ipv4_private
+    description: "Private IPv4 address (RFC 1918)"
+    regex: >-
+      \b(?:10\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|172\.(?:1[6-9]|2[0-9]|3[01])\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|192\.168\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))\b
+    redact_with: "[REDACTED-PRIVATE-IP]"
+    severity: low
+    notes: >
+      Covers 10.0.0.0/8, 172.16.0.0/12, and 192.168.0.0/16 per RFC 1918.
+      Private IPs in logs may reveal internal network topology.
+
+  - name: url_with_credentials
+    description: "URL containing embedded username:password credentials"
+    regex: >-
+      https?://[^:@\s/]+:[^@\s/]+@[a-zA-Z0-9._-]+(?::\d+)?(?:/[^\s]*)?
+    redact_with: "[REDACTED-URL-WITH-CREDS]"
+    severity: critical
+    notes: >
+      Matches http://user:password@host/path pattern. Credentials embedded
+      in URLs appear in connection strings, webhook configs, and log lines.
+      Common in DATABASE_URL, REDIS_URL, SMTP_URL environment variables.
+
+  - name: private_key_pem
+    description: "PEM-encoded private key block"
+    regex: >-
+      -----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----
+    redact_with: "[REDACTED-PRIVATE-KEY]"
+    severity: critical
+    notes: "Matches RSA, EC, DSA, OpenSSH, and encrypted private key PEM blocks"
+
+  - name: stripe_key
+    description: "Stripe API key (live or test)"
+    regex: >-
+      \b(?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,}\b
+    redact_with: "[REDACTED-STRIPE-KEY]"
+    severity: high
+    notes: "Covers Stripe secret (sk_), publishable (pk_), and restricted (rk_) keys"
+
+  - name: database_connection_string
+    description: "Database connection string with embedded credentials"
+    regex: >-
+      (?i)(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp(?:s)?|mssql|sqlserver)://[^:@\s]+:[^@\s]+@[a-zA-Z0-9._-]+(?::\d+)?(?:/[^\s?]*)?(?:\?[^\s]*)?
+    redact_with: "[REDACTED-DB-URL]"
+    severity: critical
+    notes: >
+      Matches PostgreSQL, MySQL, MongoDB, Redis, AMQP, and MSSQL connection
+      strings with embedded credentials. Common in DATABASE_URL env var.

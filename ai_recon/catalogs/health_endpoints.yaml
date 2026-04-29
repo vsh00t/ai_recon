@@ -1,0 +1,58 @@
+# Common health / readiness / introspection endpoints surfaced by AI apps.
+# Consumed by passive.health_probe and active.service_discovery.
+
+health_endpoints:
+  - path: /api/health
+    expects: json
+    keys_of_interest: [model, models, mcp_enabled, rag_enabled, version, service]
+  - path: /api/status
+    expects: json
+    keys_of_interest: [status, version, model]
+  - path: /api/version
+    expects: json
+    keys_of_interest: [version, build, commit]
+  - path: /-/health
+    expects: any
+  - path: /-/ready
+    expects: any
+  - path: /-/healthy
+    expects: any
+  - path: /healthz
+    expects: any
+  - path: /readyz
+    expects: any
+  - path: /livez
+    expects: any
+  - path: /metrics
+    expects: prometheus
+  - path: /status
+    expects: any
+
+introspection_endpoints:
+  - path: /openapi.json
+    expects: json
+  - path: /swagger.json
+    expects: json
+  - path: /docs
+    expects: html
+  - path: /redoc
+    expects: html
+  - path: /graphql
+    expects: json
+    method: POST
+    body: '{"query":"{ __schema { types { name } } }"}'
+
+# Keys that, when seen in any health JSON, should produce a finding because
+# they advertise model identity, RAG state, or tool surface.
+sensitive_keys:
+  - model
+  - models
+  - model_id
+  - vendor
+  - mcp_enabled
+  - rag_enabled
+  - tools_enabled
+  - embedding_model
+  - vector_db
+  - api_keys_loaded
+  - features

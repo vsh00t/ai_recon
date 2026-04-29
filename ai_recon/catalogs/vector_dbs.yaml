@@ -1,0 +1,324 @@
+# vector_dbs.yaml — Vector database fingerprinting signatures
+# Used to detect which vector store backs a RAG pipeline via SDK imports,
+# network probes, HTTP headers, and port/path patterns.
+---
+
+vector_databases:
+
+  - id: pinecone
+    display_name: "Pinecone"
+    open_source: false
+    protocol: REST
+    sdk_packages:
+      - pinecone-client
+      - pinecone
+    default_ports:
+      - 443
+    host_patterns:
+      - "^[a-z0-9-]+\\.svc\\.[a-z0-9-]+\\.pinecone\\.io$"
+      - "^api\\.pinecone\\.io$"
+      - "^[a-z0-9-]+\\.pinecone\\.io$"
+    path_hints:
+      - "/describe_index_stats"
+      - "/query"
+      - "/upsert"
+      - "/fetch"
+      - "/vectors/upsert"
+      - "/vectors/query"
+    detection_headers:
+      x-pinecone-api-version: ".*"
+      server: "envoy"
+    detection_response_fields:
+      - namespace
+      - totalVectorCount
+      - dimension
+    risk_notes: >
+      Managed cloud service. API key in PINECONE_API_KEY env var or client
+      config. Index names may reveal dataset topics. Namespace segmentation
+      may be used for multi-tenant isolation — test cross-namespace leakage.
+      Free tier rate limits differ from paid; timing can reveal tier.
+
+  - id: chromadb
+    display_name: "ChromaDB"
+    open_source: true
+    protocol: REST
+    sdk_packages:
+      - chromadb
+    default_ports:
+      - 8000
+    host_patterns:
+      - "^localhost$"
+      - "^127\\.0\\.0\\.1$"
+      - "^chroma(?:db)?(?:\\.[a-z0-9-]+)*$"
+    path_hints:
+      - "/api/v1"
+      - "/api/v1/collections"
+      - "/api/v1/heartbeat"
+      - "/api/v1/version"
+      - "/api/v2/collections"
+    detection_headers:
+      x-chroma-version: ".*"
+    detection_response_fields:
+      - nanosecond heartbeat
+      - collections
+    risk_notes: >
+      Often deployed without authentication in development. Default HTTP server
+      has no auth. /api/v1/collections enumerates all collections without
+      credentials. Collection metadata may contain sensitive data. SQLite
+      backend file (chroma.sqlite3) accessible on disk if path known.
+
+  - id: milvus
+    display_name: "Milvus"
+    open_source: true
+    protocol: gRPC
+    sdk_packages:
+      - pymilvus
+    default_ports:
+      - 19530
+      - 9091
+    host_patterns:
+      - "^localhost$"
+      - "^milvus(?:\\.[a-z0-9-]+)*$"
+      - "^[a-z0-9-]+\\.zillizcloud\\.com$"
+    path_hints:
+      - "/api/v1/collections"
+      - "/api/v1/entities/query"
+      - "/healthz"
+      - "/metrics"
+    detection_headers:
+      content-type: "application/grpc"
+    detection_response_fields:
+      - collection_name
+      - schema
+      - num_entities
+    risk_notes: >
+      gRPC on 19530, HTTP on 9091. Attu web UI on port 3000 may be exposed.
+      Default install has no authentication. Collection schema reveals vector
+      dimensionality and field structure. Partition tags may indicate data
+      categories. Zilliz Cloud variant is managed; check for API key leaks.
+
+  - id: qdrant
+    display_name: "Qdrant"
+    open_source: true
+    protocol: REST
+    sdk_packages:
+      - qdrant-client
+    default_ports:
+      - 6333
+      - 6334
+    host_patterns:
+      - "^localhost$"
+      - "^qdrant(?:\\.[a-z0-9-]+)*$"
+      - "^[a-z0-9-]+\\.aws\\.cloud\\.qdrant\\.io$"
+      - "^[a-z0-9-]+\\.eu-central\\.aws\\.cloud\\.qdrant\\.io$"
+    path_hints:
+      - "/collections"
+      - "/collections/{collection_name}"
+      - "/collections/{collection_name}/points/search"
+      - "/healthz"
+      - "/metrics"
+      - "/telemetry"
+    detection_headers:
+      server: "qdrant"
+      x-qdrant-version: ".*"
+    detection_response_fields:
+      - result
+      - status
+      - time
+    risk_notes: >
+      REST on 6333, gRPC on 6334. /collections endpoint lists all collections
+      unauthenticated by default. /telemetry may expose operational metrics.
+      Payload filtering allows arbitrary JSON field queries — potential for
+      data enumeration. Qdrant Cloud requires API key; on-prem often open.
+
+  - id: weaviate
+    display_name: "Weaviate"
+    open_source: true
+    protocol: REST
+    sdk_packages:
+      - weaviate-client
+    default_ports:
+      - 8080
+      - 50051
+    host_patterns:
+      - "^localhost$"
+      - "^weaviate(?:\\.[a-z0-9-]+)*$"
+      - "^[a-z0-9-]+\\.weaviate\\.network$"
+      - "^[a-z0-9-]+\\.c\\.weaviate\\.cloud$"
+    path_hints:
+      - "/v1"
+      - "/v1/schema"
+      - "/v1/objects"
+      - "/v1/graphql"
+      - "/v1/meta"
+      - "/v1/.well-known/ready"
+      - "/v1/.well-known/live"
+    detection_headers:
+      server: "Weaviate"
+      x-weaviate-version: ".*"
+    detection_response_fields:
+      - hostname
+      - modules
+      - version
+    risk_notes: >
+      GraphQL API enables powerful enumeration via introspection. /v1/schema
+      reveals all class definitions and property types. Modules section in
+      /v1/meta reveals which ML models are loaded (text2vec, qna, etc.).
+      WCS (Weaviate Cloud Services) requires auth; self-hosted often open.
+      GraphQL introspection endpoint should be disabled in production.
+
+  - id: pgvector
+    display_name: "pgvector (PostgreSQL)"
+    open_source: true
+    protocol: native
+    sdk_packages:
+      - psycopg2
+      - psycopg
+      - asyncpg
+      - pgvector
+    default_ports:
+      - 5432
+    host_patterns:
+      - "^localhost$"
+      - "^postgres(?:ql)?(?:\\.[a-z0-9-]+)*$"
+      - "^[a-z0-9-]+\\.rds\\.amazonaws\\.com$"
+      - "^[a-z0-9-]+\\.supabase\\.co$"
+    path_hints:
+      - "/rest/v1/rpc"
+    detection_headers: {}
+    detection_response_fields:
+      - pg_vector
+      - "CREATE EXTENSION vector"
+    risk_notes: >
+      PostgreSQL extension — same attack surface as any Postgres instance.
+      Credentials in DATABASE_URL or POSTGRES_* env vars. SQL injection in
+      vector similarity queries (cosine_distance, l2_distance). Table names
+      reveal document categories. Supabase deployments may expose PostgREST
+      API with row-level security bypass vectors.
+
+  - id: redis-stack
+    display_name: "Redis Stack (RediSearch)"
+    open_source: true
+    protocol: native
+    sdk_packages:
+      - redis
+      - redis-py
+      - redisvl
+    default_ports:
+      - 6379
+      - 6380
+    host_patterns:
+      - "^localhost$"
+      - "^redis(?:\\.[a-z0-9-]+)*$"
+      - "^[a-z0-9-]+\\.redis\\.cache\\.windows\\.net$"
+      - "^[a-z0-9-]+\\.upstash\\.io$"
+    path_hints: []
+    detection_headers: {}
+    detection_response_fields:
+      - "RediSearch"
+      - "RedisJSON"
+      - "RedisBloom"
+      - "redis_version"
+    risk_notes: >
+      Redis with RediSearch module for vector search. Default config has no
+      password (requirepass not set). FT._LIST reveals all search indexes.
+      FT.INFO exposes index schema and document count. KEYS * or SCAN can
+      enumerate all stored data. ACL rules may be misconfigured. Upstash
+      REST API exposes Redis over HTTPS with token auth — check for weak tokens.
+
+  - id: elasticsearch
+    display_name: "Elasticsearch"
+    open_source: false
+    protocol: REST
+    sdk_packages:
+      - elasticsearch
+      - elasticsearch-py
+    default_ports:
+      - 9200
+      - 9300
+    host_patterns:
+      - "^localhost$"
+      - "^elasticsearch(?:\\.[a-z0-9-]+)*$"
+      - "^[a-z0-9-]+\\.es\\.io$"
+      - "^[a-z0-9-]+\\.elastic\\.cloud$"
+    path_hints:
+      - "/"
+      - "/_cat/indices"
+      - "/_cat/aliases"
+      - "/_cluster/health"
+      - "/_nodes"
+      - "/_security/user"
+      - "/{index}/_knn_search"
+      - "/{index}/_search"
+    detection_headers:
+      x-elastic-product: "Elasticsearch"
+      content-type: "application/json"
+    detection_response_fields:
+      - cluster_name
+      - cluster_uuid
+      - version
+      - tagline
+    risk_notes: >
+      Unauthenticated Elasticsearch instances a common finding. /_cat/indices
+      enumerates all indices. Dense vector fields (dense_vector type) indicate
+      RAG usage. X-Pack security may be disabled. Index aliases may route to
+      sensitive indices. .kibana index reveals saved dashboards and queries.
+
+  - id: opensearch
+    display_name: "OpenSearch"
+    open_source: true
+    protocol: REST
+    sdk_packages:
+      - opensearch-py
+      - opensearchpy
+    default_ports:
+      - 9200
+      - 9600
+    host_patterns:
+      - "^localhost$"
+      - "^opensearch(?:\\.[a-z0-9-]+)*$"
+      - "^[a-z0-9-]+\\.aos\\.amazonaws\\.com$"
+      - "^search-[a-z0-9-]+\\.region\\.es\\.amazonaws\\.com$"
+    path_hints:
+      - "/"
+      - "/_cat/indices"
+      - "/_cluster/health"
+      - "/_nodes/stats"
+      - "/{index}/_search"
+      - "/_plugins/_knn"
+      - "/_plugins/_ml"
+    detection_headers:
+      x-opensearch-product: "OpenSearch"
+    detection_response_fields:
+      - cluster_name
+      - version
+      - distribution
+    risk_notes: >
+      AWS-managed OpenSearch Service often IAM-authenticated. k-NN plugin
+      (/_plugins/_knn) confirms vector search. ML plugin (/_plugins/_ml)
+      reveals deployed models. Fine-grained access control may have open
+      indices. Resource-based policies in AWS may allow cross-account access.
+
+  - id: faiss
+    display_name: "FAISS (Facebook AI Similarity Search)"
+    open_source: true
+    protocol: native
+    sdk_packages:
+      - faiss-cpu
+      - faiss-gpu
+      - faiss
+    default_ports: []
+    host_patterns: []
+    path_hints:
+      - "*.faiss"
+      - "*.index"
+      - "faiss.index"
+      - "index.faiss"
+    detection_headers: {}
+    detection_response_fields: []
+    risk_notes: >
+      In-process library with no network server. Index files serialized to
+      disk — FAISS index files contain raw float vectors (recoverable if
+      leaked). Often paired with Pickle files for ID mapping (*.pkl) — pickle
+      deserialization vulnerability. Index type (Flat, IVF, HNSW) reveals
+      dataset scale. GPU variant indicates high-performance deployment.

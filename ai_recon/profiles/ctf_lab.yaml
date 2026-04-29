@@ -1,0 +1,225 @@
+# ctf_lab.yaml — CTF / lab environment profile
+# All techniques enabled including high-intrusiveness jailbreaks, prompt injection,
+# and indirect injection. Designed for capture-the-flag competitions and isolated
+# lab environments with deliberate targets.
+#
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  WARNING: This profile enables HIGH-INTRUSIVENESS techniques including      ║
+# ║  jailbreak attempts, prompt injection, indirect injection, and data          ║
+# ║  exfiltration tests. Only use in authorized lab/CTF environments with        ║
+# ║  explicit permission. Never run against production systems.                  ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+---
+
+name: ctf_lab
+description: >
+  CTF and lab environment profile with all reconnaissance and exploitation
+  techniques enabled. Includes jailbreak_suite, prompt_injection,
+  indirect_injection, and data exfiltration tests. This profile is designed
+  exclusively for isolated training environments, CTF challenges, and
+  authorized penetration testing labs where there is no risk to real users
+  or production data.
+
+  AUTHORIZED USE ONLY. Running this profile against production systems or
+  systems without explicit written authorization is prohibited and likely illegal.
+intrusiveness_max: high
+
+techniques:
+  enable:
+    # ── Passive Reconnaissance ─────────────────────────────────────────────
+    - passive.header_fingerprint
+    - passive.health_probe
+    - passive.openai_compat_probe
+    - passive.tls_metadata
+    - passive.dns_recon
+    - passive.js_config_extract
+    - passive.repo_mining
+    - passive.env_file_scan
+    - passive.dependency_audit
+    - passive.docker_label_inspect
+    - passive.ci_config_scan
+    - passive.k8s_manifest_scan
+
+    # ── Active Model Probing ───────────────────────────────────────────────
+    - active.service_discovery
+    - active.status_triage
+    - active.gateway_detect
+    - active.model_identity
+    - active.model_contradiction
+    - active.model_cutoff
+    - active.model_behavior
+    - active.context_window
+    - active.tokenizer_probe
+    - active.guardrail_probe
+    - active.system_prompt_probe
+
+    # ── RAG Pipeline ──────────────────────────────────────────────────────
+    - active.rag_boundary
+    - active.rag_mapping
+    - active.rag_threshold
+    - active.rag_metadata_leak
+    - active.rag_inversion
+
+    # ── Agent / Tool Enumeration ──────────────────────────────────────────
+    - active.mcp_enum
+    - active.a2a_enum
+    - active.tool_enum
+
+    # ── Injection and Exploitation ────────────────────────────────────────
+    - active.jailbreak_suite
+    - active.prompt_injection
+    - active.indirect_injection
+    - active.data_exfiltration_test
+
+    # ── Infrastructure ─────────────────────────────────────────────────────
+    - infra.side_channel_timing
+    - infra.cost_oracle
+    - infra.vector_db_probe
+    - infra.inference_server_probe
+
+    # ── Evasion ────────────────────────────────────────────────────────────
+    - evasion.honeypot_detect
+    - evasion.siem_evasion_test
+    - evasion.rephrase_evasion
+
+    # ── SIEM / Logging ────────────────────────────────────────────────────
+    - adapters.siem_query
+
+  disable: []
+
+options:
+  model_identity:
+    max_attempts: 10
+    try_contradiction: true
+    try_indirect: true
+    try_roleplay: true
+    confidence_threshold: 0.4
+
+  context_window:
+    max_test_tokens: 2000000
+    step_size: 32768
+    binary_search: true
+    marker_length: 256
+
+  model_behavior:
+    run_arithmetic: true
+    run_coding: true
+    run_reasoning: true
+    run_verbosity_analysis: true
+    run_instruction_following: true
+
+  guardrail_probe:
+    categories:
+      - violence
+      - pii_request
+      - jailbreak_classic
+      - jailbreak_persona
+      - jailbreak_developer_mode
+      - system_prompt_extraction
+      - many_shot
+      - roleplay_bypass
+      - translation_bypass
+    max_probes_per_category: 10
+    record_refusal_phrasing: true
+    attempt_bypass_on_refusal: true
+
+  jailbreak_suite:
+    corpus_files:
+      - jailbreak_corpus/dan.yaml
+      - jailbreak_corpus/many_shot.yaml
+    run_all: true
+    stop_on_first_success: false
+    record_all_responses: true
+
+  system_prompt_probe:
+    methods:
+      - indirect_meta_question
+      - role_play_bypass
+      - translation_trick
+      - token_smuggling
+      - sandwich_attack
+      - virtual_prompt_injection
+    max_attempts: 10
+
+  rag_mapping:
+    topics:
+      - HR policies
+      - employee data
+      - financial records
+      - security procedures
+      - internal architecture
+      - customer data
+      - credentials
+      - contracts
+      - incident reports
+      - flag_documents
+    queries_per_topic: 15
+    extract_metadata: true
+    attempt_full_corpus_dump: true
+
+  rag_inversion:
+    reconstruction_attempts: 20
+    use_membership_inference: true
+
+  mcp_enum:
+    enumerate_tools: true
+    enumerate_resources: true
+    enumerate_prompts: true
+    test_dangerous_tools: true
+    attempt_tool_abuse: true
+    dangerous_tool_patterns:
+      - bash
+      - exec
+      - shell
+      - run_command
+      - write_file
+      - delete_file
+      - fetch
+      - browse
+      - eval
+      - subprocess
+
+  prompt_injection:
+    delivery_channels:
+      - direct_user_input
+      - crafted_user_message
+      - header_injection
+    max_attempts: 25
+    use_rephrase_catalog: true
+
+  indirect_injection:
+    delivery_channels:
+      - rag_corpus_injection
+      - tool_output_injection
+      - document_metadata
+      - web_content_injection
+    max_attempts: 15
+
+  data_exfiltration_test:
+    methods:
+      - markdown_image_url
+      - hyperlink_embedding
+      - tool_call_parameters
+    target: "oob_collector"
+    note: "Only use against lab OOB endpoints — never real collector infrastructure"
+
+  evasion.rephrase_evasion:
+    use_catalog: true
+    catalog_file: "catalogs/rephrase_intents.yaml"
+    auto_rephrase_on_refusal: true
+
+  infra.side_channel_timing:
+    samples: 30
+    measure_ttft: true
+    measure_total: true
+    jitter_ms: 100
+
+  rate_limit:
+    rps: 5.0
+    jitter_seconds: 0.5
+    max_concurrent: 5
+
+  stealth:
+    rotate_user_agent: false
+    add_jitter: false
+    avoid_burst: false

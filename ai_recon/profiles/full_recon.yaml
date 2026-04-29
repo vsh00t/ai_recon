@@ -1,0 +1,116 @@
+# full_recon.yaml — End-to-end AI reconnaissance profile.
+#
+# Generic, vendor-agnostic walkthrough of every layer of the AI stack:
+#   - Infrastructure (gateway, headers, health, TLS, DNS, JS configs)
+#   - Source (repo mining, dependency / CI / Docker / k8s / env-file scans)
+#   - Service discovery (HTTP service ports, inference servers, vector DBs)
+#   - Model identification (identity, cutoff, contradiction, behaviour,
+#     context window, tokenizer)
+#   - RAG pipeline (mapping, chunk boundaries, threshold, inversion,
+#     metadata leakage)
+#   - Agent surface (MCP, A2A, tool enumeration)
+#   - Detection & evasion (honeypot signals, SIEM rule pre-flight, rephrase
+#     coverage, SIEM detection visibility, side-channel timing, cost oracle)
+#
+# Use this profile when you want a complete picture of any AI-enabled
+# target — SaaS, internal enterprise, lab, or CTF.
+---
+
+name: full_recon
+description: >
+  Comprehensive, vendor-agnostic reconnaissance profile that exercises every
+  layer of an AI application: infrastructure, source-code intel, service
+  discovery, model fingerprinting, RAG pipelines, agent capabilities, and
+  detection/evasion analysis. Suitable for any AI-enabled target with
+  authorisation in scope.
+intrusiveness_max: medium
+
+techniques:
+  enable:
+    # --- 1. Passive ---------------------------------------------------------
+    - passive.header_fingerprint
+    - passive.health_probe
+    - passive.openai_compat_probe
+    - passive.tls_metadata
+    - passive.dns_recon
+    - passive.js_config_extract
+    - passive.repo_mining
+    - passive.dependency_audit
+    - passive.ci_config_scan
+    - passive.docker_label_inspect
+    - passive.env_file_scan
+    - passive.k8s_manifest_scan
+    - passive.osint_model_card
+
+    # --- 2. Service discovery ----------------------------------------------
+    - active.service_discovery
+    - active.status_triage
+    - active.gateway_detect
+    - infra.inference_server_probe
+    - infra.vector_db_probe
+
+    # --- 3. Model fingerprinting & identification --------------------------
+    - active.model_identity
+    - active.model_cutoff
+    - active.model_contradiction
+    - active.model_behavior
+    - active.context_window
+    - active.tokenizer_probe
+
+    # --- 4. RAG pipeline reconnaissance ------------------------------------
+    - active.rag_mapping
+    - active.rag_boundary
+    - active.rag_threshold
+    - active.rag_inversion
+    - active.rag_metadata_leak
+
+    # --- 5. Agent / tool surface -------------------------------------------
+    - active.mcp_enum
+    - active.a2a_enum
+    - active.tool_enum
+
+    # --- 6. Detection & evasion --------------------------------------------
+    - evasion.honeypot_detect
+    - evasion.siem_evasion_test
+    - evasion.rephrase_evasion
+    - adapters.siem_query
+    - infra.side_channel_timing
+    - infra.cost_oracle
+
+    # --- 7. Safety probes (model behaviour under adversarial input) -------
+    - safety.pii_leakage
+    - safety.bias_probe
+    - safety.toxicity_probe
+    - safety.training_data_extract
+
+  disable: []
+
+config:
+  passive.repo_mining:
+    providers: [github, gitlab, bitbucket]
+    look_for_secrets: true
+    flag_ai_frameworks: true
+
+  passive.dependency_audit:
+    flag_ai_frameworks: true
+
+  active.service_discovery:
+    wordlist: api_paths.txt
+
+  active.rag_mapping:
+    extract_citations: true
+    probe_chunk_boundaries: true
+
+  adapters.siem_query:
+    lookback_hours: 24
+    search_terms:
+      - "prompt injection"
+      - "jailbreak"
+      - "system prompt"
+      - "DAN"
+      - "ai-recon"
+
+rate_limit:
+  rps: 2.0
+  jitter_seconds: [0.5, 1.5]
+  max_concurrent: 4

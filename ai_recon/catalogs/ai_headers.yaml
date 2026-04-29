@@ -1,0 +1,58 @@
+# AI-relevant HTTP response headers.
+# Used by passive.header_fingerprint to flag and classify backends.
+
+ai_backend_hints:
+  - name: "X-AI-Backend"
+    description: "Custom header advertising the upstream AI backend."
+  - name: "X-AI-Provider"
+  - name: "X-Model"
+  - name: "X-Model-Version"
+  - name: "X-Model-Family"
+  - name: "X-Provider"
+  - name: "X-Inference-Server"
+  - name: "X-LLM-Backend"
+
+rag_hints:
+  - name: "X-RAG-Provider"
+  - name: "X-Vector-DB"
+  - name: "X-Embedding-Model"
+  - name: "X-Retrieval-Mode"
+  - name: "X-Chunk-Size"
+
+orchestration_hints:
+  - name: "X-LangChain-Trace"
+  - name: "X-LangSmith-Run-Id"
+  - name: "X-LangServe-Version"
+  - name: "X-Llama-Index-Version"
+  - name: "X-Crewai-Run"
+  - name: "X-AutoGen-Session"
+
+vendor_hints:
+  - name: "OpenAI-Organization"
+  - name: "OpenAI-Processing-Ms"
+  - name: "OpenAI-Version"
+  - name: "Anthropic-Version"
+  - name: "Anthropic-Ratelimit-Requests-Limit"
+  - name: "Anthropic-Ratelimit-Tokens-Limit"
+  - name: "X-Goog-Api-Version"
+  - name: "X-Mistral-Version"
+  - name: "X-Cohere-Trace-Id"
+
+infra_hints:
+  - name: "X-Powered-By"
+  - name: "Server"
+  - name: "Via"
+  - name: "X-Kong-Proxy-Latency"
+  - name: "X-Kong-Upstream-Latency"
+  - name: "X-Envoy-Upstream-Service-Time"
+  - name: "X-Cache"
+  - name: "CF-Ray"
+
+rate_limit_hints:
+  - name: "RateLimit-Limit"
+  - name: "RateLimit-Remaining"
+  - name: "RateLimit-Reset"
+  - name: "X-RateLimit-Limit-Requests"
+  - name: "X-RateLimit-Remaining-Requests"
+  - name: "X-RateLimit-Limit-Tokens"
+  - name: "X-RateLimit-Remaining-Tokens"

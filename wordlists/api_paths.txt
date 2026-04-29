@@ -1,0 +1,110 @@
+# AI/ML and admin-style API paths commonly exposed by AI applications.
+# Curated subset — extend with SecLists or api_wordlist for breadth.
+# Lines starting with # are comments and are ignored by loaders.
+
+# --- Health / readiness ---
+api/health
+api/status
+api/version
+api/ping
+healthz
+readyz
+livez
+status
+-/health
+-/ready
+-/healthy
+-/metrics
+metrics
+
+# --- OpenAI-compatible ---
+v1/models
+v1/chat/completions
+v1/completions
+v1/embeddings
+v1/audio/transcriptions
+v1/images/generations
+v1/moderations
+v1/files
+v1/fine_tunes
+v1/threads
+v1/assistants
+
+# --- Anthropic / Claude ---
+v1/messages
+
+# --- Ollama ---
+api/tags
+api/show
+api/generate
+api/chat
+api/embeddings
+api/pull
+api/ps
+
+# --- vLLM / TGI / llama.cpp ---
+generate
+generate_stream
+info
+props
+slots
+
+# --- HuggingFace TGI ---
+v1/info
+
+# --- Anthropic / inference proxies ---
+admin/v1/models
+admin/v1/keys
+
+# --- LangServe / LangSmith ---
+invoke
+batch
+stream
+playground
+
+# --- RAG / vector DB ---
+api/v1/collections
+api/v1/heartbeat
+collections
+v1/meta
+v1/schema
+v1/objects
+api/v1/health
+rpc/version
+
+# --- Common admin ---
+admin
+admin/api
+api/admin
+debug
+debug/vars
+debug/pprof
+config
+config.json
+
+# --- Documentation / introspection ---
+openapi.json
+swagger.json
+docs
+api/docs
+redoc
+graphql
+
+# --- MCP / A2A ---
+.well-known/mcp
+.well-known/agent
+.well-known/openai
+mcp
+mcp/v1/list_tools
+a2a
+a2a/discover
+agent-card.json
+
+# --- Plain config dumps ---
+.env
+.env.local
+config.yaml
+settings.json
+package.json
+requirements.txt
+pyproject.toml

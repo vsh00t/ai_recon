@@ -1,0 +1,294 @@
+# honeypot_signals.yaml — Canary and honeypot detection patterns
+# These patterns identify synthetic/fake credentials, data, and infrastructure
+# planted by defenders to detect unauthorized access or reconnaissance.
+# IMPORTANT: Detection of a honeypot signal is a HIGH-severity finding.
+# Action on detection: log_and_block — never attempt to use detected canaries.
+---
+
+action_on_detection: log_and_block
+
+# ── Substring Patterns ────────────────────────────────────────────────────────
+# Generic strings commonly used as placeholders in documentation, templates,
+# and honeypot deployments.
+
+substring_patterns:
+  - value: "HONEYPOT"
+    case_sensitive: false
+    description: "Explicit honeypot label"
+    severity: critical
+
+  - value: "CANARY"
+    case_sensitive: false
+    description: "Explicit canary token label"
+    severity: critical
+
+  - value: "EXAMPLE"
+    case_sensitive: false
+    description: "Example/documentation placeholder"
+    severity: low
+
+  - value: "TEST123"
+    case_sensitive: false
+    description: "Generic test credential pattern"
+    severity: medium
+
+  - value: "PLACEHOLDER"
+    case_sensitive: false
+    description: "Template placeholder value"
+    severity: low
+
+  - value: "FAKE"
+    case_sensitive: false
+    description: "Explicit fake data marker"
+    severity: medium
+
+  - value: "DUMMY"
+    case_sensitive: false
+    description: "Dummy data marker"
+    severity: low
+
+  - value: "REDACTED"
+    case_sensitive: false
+    description: "Redacted value — real data was removed"
+    severity: low
+
+  - value: "CHANGEME"
+    case_sensitive: false
+    description: "Default credential that must be changed"
+    severity: high
+
+  - value: "YOUR_KEY_HERE"
+    case_sensitive: false
+    description: "Template instruction left in place"
+    severity: medium
+
+  - value: "REPLACE_ME"
+    case_sensitive: false
+    description: "Template instruction left in place"
+    severity: medium
+
+  - value: "INSERT_KEY_HERE"
+    case_sensitive: false
+    description: "Template instruction left in place"
+    severity: medium
+
+  - value: "YOUR_API_KEY"
+    case_sensitive: false
+    description: "Unfilled API key template variable"
+    severity: medium
+
+# ── AWS Canary Patterns ───────────────────────────────────────────────────────
+# Amazon publishes these as known example access keys. Any system that accepts
+# them is monitored by AWS and the token owner.
+
+aws_canary_patterns:
+  - value: "AKIAIOSFODNN7EXAMPLE"
+    description: "AWS documentation example access key ID"
+    reference: "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html"
+    severity: critical
+    notes: >
+      This key appears in AWS official documentation. Any service that accepts
+      this key is under active monitoring. Using it will trigger AWS GuardDuty
+      and likely alert the account owner immediately.
+
+  - value: "AKIAI44QH8DHBEXAMPLE"
+    description: "AWS SDK example access key ID"
+    reference: "https://docs.aws.amazon.com/sdkref/latest/guide/access-aws-services.html"
+    severity: critical
+    notes: >
+      Appears in AWS SDK reference documentation. Same risk as above.
+
+  - value: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    description: "AWS documentation example secret access key"
+    reference: "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html"
+    severity: critical
+    notes: >
+      Paired with AKIAIOSFODNN7EXAMPLE in AWS docs. Treat any occurrence
+      as a deliberate honeypot or documentation leak.
+
+# ── Password Patterns ─────────────────────────────────────────────────────────
+# Regex patterns for credentials that look suspiciously convenient —
+# often used in honeypot credential stores or default config files.
+
+password_patterns:
+  - name: company_year_symbol
+    regex: "^[A-Z][a-z]{2,15}[0-9]{4}[!@#$%^&*]$"
+    description: >
+      CompanyName + Year + Symbol pattern (e.g., Acme2024!, NovaTech2025@).
+      Common in default enterprise password policies — often left as-is.
+    severity: medium
+
+  - name: common_default_with_year
+    regex: "^(?:Password|Admin|Welcome|Login)[0-9]{2,4}[!@#$]?$"
+    description: >
+      Common default passwords appended with year (e.g., Password2024!,
+      Welcome2025). Frequently used in credential stuffing lists and
+      honeypot traps.
+    severity: high
+
+  - name: sequential_simple
+    regex: "^(?:password|pass|admin|root|user|guest|login|test)(?:123|1234|12345|123456)?$"
+    description: >
+      Extremely simple credentials likely to be honeypots or defaults
+    severity: high
+
+  - name: keyboard_walk
+    regex: "^(?:qwerty|asdfgh|zxcvbn|qwertyuiop|1qaz2wsx|!QAZ2wsx)$"
+    description: >
+      Keyboard walk patterns — commonly placed in honeypot credential stores
+    severity: medium
+
+# ── Domain Canaries ───────────────────────────────────────────────────────────
+# Reserved/special-use TLDs and domains per RFC 2606 and IANA.
+# Real production systems should never use these domains.
+
+domain_canary:
+  reserved_tlds:
+    - ".local"
+    - ".test"
+    - ".invalid"
+    - ".example"
+    - ".localhost"
+  reserved_domains:
+    - "example.com"
+    - "example.org"
+    - "example.net"
+    - "example.edu"
+    - "localhost.localdomain"
+  references:
+    - "RFC 2606 — Reserved Top Level DNS Names"
+    - "RFC 6761 — Special-Use Domain Names"
+  severity: low
+  notes: >
+    Endpoints referencing these domains are either development/test environments
+    or deliberate honeypots. Do not attempt credential use or data extraction.
+
+# ── IP Canaries ───────────────────────────────────────────────────────────────
+# RFC 5737 TEST-NET ranges reserved for documentation and examples.
+# Traffic to these ranges may be monitored by network security tooling.
+
+ip_canary:
+  test_networks:
+    - cidr: "192.0.2.0/24"
+      name: "TEST-NET-1"
+      reference: "RFC 5737"
+    - cidr: "198.51.100.0/24"
+      name: "TEST-NET-2"
+      reference: "RFC 5737"
+    - cidr: "203.0.113.0/24"
+      name: "TEST-NET-3"
+      reference: "RFC 5737"
+    - cidr: "100.64.0.0/10"
+      name: "Shared Address Space (CGNAT)"
+      reference: "RFC 6598"
+  loopback:
+    - cidr: "127.0.0.0/8"
+      name: "Loopback"
+      reference: "RFC 1122"
+  link_local:
+    - cidr: "169.254.0.0/16"
+      name: "Link-Local"
+      reference: "RFC 3927"
+  severity: low
+  notes: >
+    Connections to documentation or reserved IP ranges in a production context
+    indicate misconfiguration or canary infrastructure. Log and investigate.
+
+# ── URL Canaries ──────────────────────────────────────────────────────────────
+# Well-known documentation/example domains that should never appear in
+# production configuration or credentials.
+
+url_canary:
+  domains:
+    - "example.com"
+    - "example.org"
+    - "example.net"
+    - "httpbin.org"
+    - "requestbin.com"
+    - "webhook.site"
+    - "canarytokens.com"
+    - "canarytokens.org"
+    - "interact.sh"
+    - "burpcollaborator.net"
+    - "oastify.com"
+  patterns:
+    - regex: "https?://[a-z0-9-]+\\.canarytokens\\.(com|org)/.*"
+      description: "Thinkst CanaryToken URL"
+      severity: critical
+    - regex: "https?://[a-z0-9-]+\\.interact\\.sh/.*"
+      description: "ProjectDiscovery interactsh OOB endpoint"
+      severity: critical
+    - regex: "https?://[a-z0-9-]+\\.burpcollaborator\\.net/.*"
+      description: "PortSwigger Burp Collaborator OOB endpoint"
+      severity: critical
+    - regex: "https?://[a-z0-9-]+\\.oastify\\.com/.*"
+      description: "PortSwigger OAST endpoint"
+      severity: critical
+  severity: medium
+
+# ── Credential-Too-Convenient ─────────────────────────────────────────────────
+# Username:password combinations that are almost certainly honeypots or defaults.
+
+credential_too_convenient:
+  pairs:
+    - username: "admin"
+      password: "admin"
+      severity: high
+    - username: "admin"
+      password: "password"
+      severity: high
+    - username: "test"
+      password: "test"
+      severity: high
+    - username: "root"
+      password: "root"
+      severity: high
+    - username: "root"
+      password: "toor"
+      severity: high
+    - username: "guest"
+      password: "guest"
+      severity: medium
+    - username: "demo"
+      password: "demo"
+      severity: medium
+    - username: "user"
+      password: "user"
+      severity: medium
+    - username: "user"
+      password: "password"
+      severity: high
+    - username: "admin"
+      password: ""
+      severity: high
+    - username: "root"
+      password: ""
+      severity: critical
+  notes: >
+    Credentials matching these pairs should never be used. Their presence in
+    a discovered configuration indicates either a honeypot or a critical
+    misconfiguration requiring immediate escalation.
+
+# ── Canary Token Regex Patterns ───────────────────────────────────────────────
+# Patterns for detecting known canary token formats across providers.
+
+canary_token_patterns:
+  - name: thinkst_canarytoken
+    regex: "(?i)\\b[a-f0-9]{32}\\.(canarytokens\\.com|canarytokens\\.org)\\b"
+    description: "Thinkst Canary token domain pattern"
+    severity: critical
+
+  - name: aws_iam_canary
+    regex: "AKIAIOSFODNN7EXAMPLE|AKIAI44QH8DHBEXAMPLE"
+    description: "AWS published example/canary access key IDs"
+    severity: critical
+
+  - name: github_canary
+    regex: "ghp_[A-Za-z0-9]{36}EXAMPLE|github_pat_[A-Za-z0-9_]{82}EXAMPLE"
+    description: "GitHub example personal access token pattern"
+    severity: high
+
+  - name: stripe_canary
+    regex: "(?:sk|pk)_(?:test|live)_[a-zA-Z0-9]{24}EXAMPLE"
+    description: "Stripe example API key pattern"
+    severity: high

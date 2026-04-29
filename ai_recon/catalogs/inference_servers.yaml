@@ -1,0 +1,342 @@
+# inference_servers.yaml — Local / self-hosted inference server fingerprints
+# Patterns used to detect which inference server is running behind an endpoint
+# via port probing, HTTP path responses, response headers, and body fields.
+---
+
+inference_servers:
+
+  - id: ollama
+    display_name: "Ollama"
+    description: >
+      Local inference server for running GGUF/GGML models. Provides an
+      OpenAI-compatible API and a native REST API. Popular for developer
+      workstations and small-team deployments.
+    default_ports:
+      - 11434
+    probe_paths:
+      - path: /api/version
+        method: GET
+        expected_status: 200
+        response_fields:
+          - version
+        sample_response: '{"version":"0.3.14"}'
+      - path: /api/tags
+        method: GET
+        expected_status: 200
+        response_fields:
+          - models
+      - path: /v1/models
+        method: GET
+        expected_status: 200
+        response_fields:
+          - object
+          - data
+    version_field: version
+    version_path: /api/version
+    detection_headers:
+      server: "ollama"
+      content-type: "application/json"
+    user_agent_patterns:
+      - "(?i)ollama"
+    response_body_patterns:
+      - "(?i)\"version\":\\s*\"[0-9]+\\.[0-9]+\\.[0-9]+\""
+      - "(?i)ollama"
+    metrics_path: null
+    openai_compat: true
+    openai_compat_base: "/v1"
+    risk_notes: >
+      Binds to 127.0.0.1 by default but OLLAMA_HOST=0.0.0.0 is commonly set.
+      No authentication by default. /api/tags enumerates all downloaded models.
+      /api/show reveals model architecture and quantization level. Custom
+      Modelfile system prompts may be overridden. CORS is permissive by default.
+
+  - id: vllm
+    display_name: "vLLM"
+    description: >
+      High-throughput GPU inference server with PagedAttention. OpenAI-compatible
+      API. Supports tensor parallelism and multi-LoRA serving.
+    default_ports:
+      - 8000
+    probe_paths:
+      - path: /v1/models
+        method: GET
+        expected_status: 200
+        response_fields:
+          - object
+          - data
+        sample_response: '{"object":"list","data":[{"id":"meta-llama/Llama-3-8B","object":"model"}]}'
+      - path: /health
+        method: GET
+        expected_status: 200
+      - path: /version
+        method: GET
+        expected_status: 200
+        response_fields:
+          - version
+      - path: /metrics
+        method: GET
+        expected_status: 200
+        content_type: "text/plain"
+    version_field: version
+    version_path: /version
+    detection_headers:
+      x-powered-by: "(?i)vllm"
+      server: "(?i)uvicorn"
+    user_agent_patterns: []
+    response_body_patterns:
+      - "(?i)vllm"
+      - "vllm:model_forward_time_ms"
+      - "vllm:gpu_cache_usage_perc"
+    metrics_path: /metrics
+    openai_compat: true
+    openai_compat_base: "/v1"
+    risk_notes: >
+      /metrics endpoint (Prometheus format) leaks model name, GPU utilization,
+      cache hit rate, and request queue depth. --api-key not enforced by default.
+      Multi-LoRA: /v1/models lists all loaded adapters. --served-model-name
+      alias may obfuscate real HuggingFace model ID. tensor_parallel_size in
+      logs reveals GPU count. --trust-remote-code flag allows arbitrary code exec.
+
+  - id: tgi
+    display_name: "Text Generation Inference (TGI)"
+    description: >
+      HuggingFace's production-grade inference server. Supports continuous
+      batching, flash attention, and quantization. Docker-first deployment.
+    default_ports:
+      - 8080
+    probe_paths:
+      - path: /info
+        method: GET
+        expected_status: 200
+        response_fields:
+          - model_id
+          - model_dtype
+          - model_device_type
+          - max_concurrent_requests
+          - max_input_length
+          - max_total_tokens
+          - sha
+        sample_response: |
+          {"model_id":"meta-llama/Llama-2-7b-chat-hf","model_dtype":"torch.float16",
+           "model_device_type":"cuda","sha":"abc123","max_input_length":4096}
+      - path: /health
+        method: GET
+        expected_status: 200
+      - path: /metrics
+        method: GET
+        expected_status: 200
+        content_type: "text/plain"
+      - path: /generate
+        method: POST
+        expected_status: 200
+    version_field: version
+    version_path: /info
+    detection_headers:
+      x-compute-type: "(?:gpu|cpu)"
+      x-compute-characters: "\\d+"
+      content-type: "application/json"
+    docker_labels:
+      - "com.huggingface.model"
+      - "maintainer: Hugging Face"
+    user_agent_patterns: []
+    response_body_patterns:
+      - "(?i)\"model_id\":"
+      - "(?i)text.generation.inference"
+      - "tgi_"
+    metrics_path: /metrics
+    openai_compat: true
+    openai_compat_base: "/v1"
+    risk_notes: >
+      /info reveals model_id, SHA commit, quantization type, and capacity limits.
+      Docker label com.huggingface.model pinpoints exact model version.
+      Watermark parameters (watermark=true) indicate output provenance tracking.
+      /generate endpoint accepts raw prompts bypassing chat template. Prometheus
+      metrics expose token throughput and latency percentiles.
+
+  - id: lmstudio
+    display_name: "LM Studio"
+    description: >
+      GUI application for running local LLMs on macOS, Windows, and Linux.
+      Exposes an OpenAI-compatible local server for development use.
+    default_ports:
+      - 1234
+    probe_paths:
+      - path: /v1/models
+        method: GET
+        expected_status: 200
+        response_fields:
+          - object
+          - data
+        sample_response: '{"object":"list","data":[{"id":"lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"}]}'
+      - path: /v1/chat/completions
+        method: POST
+        expected_status: 200
+    version_field: null
+    version_path: null
+    detection_headers:
+      server: "(?i)lm\\s?studio"
+    user_agent_patterns:
+      - "(?i)lm.?studio"
+    response_body_patterns:
+      - "(?i)lmstudio"
+      - "(?i)lm.studio"
+    metrics_path: null
+    openai_compat: true
+    openai_compat_base: "/v1"
+    risk_notes: >
+      Model IDs in /v1/models reveal which GGUF files are loaded, including
+      community-quantized variant names. No authentication by default — any
+      process on the host can call the API. Binding to 0.0.0.0 exposes to
+      the network. Model path in response may contain username or directory
+      structure revealing OS user info.
+
+  - id: llamacpp_server
+    display_name: "llama.cpp HTTP Server"
+    description: >
+      Lightweight HTTP server bundled with llama.cpp. Supports GGUF models
+      with OpenAI-compatible and native endpoints.
+    default_ports:
+      - 8080
+    probe_paths:
+      - path: /health
+        method: GET
+        expected_status: 200
+        response_fields:
+          - status
+        sample_response: '{"status":"ok"}'
+      - path: /v1/models
+        method: GET
+        expected_status: 200
+      - path: /slots
+        method: GET
+        expected_status: 200
+        response_fields:
+          - id
+          - state
+          - n_ctx
+          - model
+      - path: /props
+        method: GET
+        expected_status: 200
+        response_fields:
+          - total_slots
+          - chat_template
+          - default_generation_settings
+    version_field: null
+    version_path: null
+    detection_headers:
+      server: "(?i)llama\\.cpp"
+    user_agent_patterns:
+      - "(?i)llama\\.?cpp"
+    response_body_patterns:
+      - "(?i)llama\\.cpp"
+      - "(?i)\"n_ctx\":"
+      - "(?i)\"n_predict\":"
+      - "(?i)\"chat_template\":"
+    metrics_path: /metrics
+    openai_compat: true
+    openai_compat_base: "/v1"
+    risk_notes: >
+      /props reveals model path (may contain filesystem layout), context size,
+      chat template, and default generation parameters. /slots shows all
+      concurrent inference slots with active context. /tokenize endpoint allows
+      arbitrary tokenization probing to fingerprint exact model vocabulary.
+      --api-key flag often omitted in dev deployments.
+
+  - id: litellm
+    display_name: "LiteLLM Proxy"
+    description: >
+      OpenAI-compatible proxy that routes to 100+ LLM providers. Used for
+      unified API access, load balancing, and cost tracking.
+    default_ports:
+      - 4000
+    probe_paths:
+      - path: /health
+        method: GET
+        expected_status: 200
+        response_fields:
+          - healthy_endpoints
+          - unhealthy_endpoints
+          - healthy_count
+          - unhealthy_count
+      - path: /v1/models
+        method: GET
+        expected_status: 200
+      - path: /model/info
+        method: GET
+        expected_status: 200
+      - path: /spend/logs
+        method: GET
+        expected_status: 200
+      - path: /budget/info
+        method: GET
+        expected_status: 200
+      - path: /key/info
+        method: GET
+        expected_status: 200
+    version_field: null
+    version_path: null
+    detection_headers:
+      server: "(?i)uvicorn"
+      x-litellm-version: ".*"
+    user_agent_patterns:
+      - "(?i)litellm"
+    response_body_patterns:
+      - "(?i)litellm"
+      - "(?i)healthy_endpoints"
+      - "(?i)router_settings"
+    metrics_path: /metrics
+    openai_compat: true
+    openai_compat_base: "/v1"
+    risk_notes: >
+      /health reveals all configured backend endpoints with their models and
+      health status — exposes full provider topology. /model/info lists model
+      aliases and actual provider mappings. /spend/logs shows cost per API key.
+      Master key and virtual keys (sk-...) grant different access levels.
+      LITELLM_MASTER_KEY often set as env var. Database URL in config reveals
+      spend tracking backend.
+
+  - id: localai
+    display_name: "LocalAI"
+    description: >
+      Free, open-source OpenAI-compatible inference server supporting
+      llama.cpp, whisper, stable diffusion, and more.
+    default_ports:
+      - 8080
+    probe_paths:
+      - path: /v1/models
+        method: GET
+        expected_status: 200
+        response_fields:
+          - object
+          - data
+      - path: /readyz
+        method: GET
+        expected_status: 200
+      - path: /healthz
+        method: GET
+        expected_status: 200
+      - path: /metrics
+        method: GET
+        expected_status: 200
+        content_type: "text/plain"
+    version_field: null
+    version_path: null
+    detection_headers:
+      server: "(?i)localai"
+      x-localai-version: ".*"
+    user_agent_patterns:
+      - "(?i)local.?ai"
+    response_body_patterns:
+      - "(?i)localai"
+      - "(?i)local-ai"
+    metrics_path: /metrics
+    openai_compat: true
+    openai_compat_base: "/v1"
+    risk_notes: >
+      /v1/models enumerates all configured model YAML definitions. Model configs
+      stored in /models directory — names reveal task types (transcription, TTS,
+      image generation). GALLERIES endpoint reveals which community model gallery
+      is configured. Backend parameter in model config reveals underlying engine
+      (llama.cpp, whisper.cpp, etc.). API_KEY env var often unset in self-hosted
+      deployments.

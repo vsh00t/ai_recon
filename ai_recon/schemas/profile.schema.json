@@ -1,0 +1,283 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-recon.io/schemas/profile.schema.json",
+  "title": "ai-recon Assessment Profile",
+  "description": "Validation schema for profile YAML files. Profiles define which techniques to enable or disable, the maximum intrusiveness level, and per-technique options.",
+  "type": "object",
+  "required": ["name", "description", "intrusiveness_max", "techniques"],
+  "additionalProperties": false,
+  "properties": {
+
+    "name": {
+      "type": "string",
+      "description": "Machine-readable profile identifier. Must match the filename (without .yaml extension). Use lowercase with underscores.",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "minLength": 2,
+      "maxLength": 64,
+      "examples": ["blackbox_saas", "ctf_lab", "rag_audit", "internal_enterprise"]
+    },
+
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the profile's purpose, intended use cases, and any important warnings or prerequisites.",
+      "minLength": 10,
+      "maxLength": 2000
+    },
+
+    "intrusiveness_max": {
+      "type": "string",
+      "description": "Maximum intrusiveness level this profile may execute. The runtime will refuse to run any technique whose intrusiveness level exceeds this value, even if explicitly listed in 'enable'. This acts as a safety ceiling. The global scope.yaml intrusiveness_max further constrains this value.",
+      "enum": ["info", "low", "medium", "high"]
+    },
+
+    "techniques": {
+      "type": "object",
+      "description": "Technique enable and disable lists. Techniques not mentioned in either list use the system default (disabled unless the technique is always-on).",
+      "required": ["enable"],
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "type": "array",
+          "description": "List of technique IDs to enable for this profile. Use dot-notation category.technique_name (e.g., passive.header_fingerprint, active.model_identity).",
+          "items": {
+            "$ref": "#/definitions/TechniqueId"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "disable": {
+          "type": "array",
+          "description": "List of technique IDs to explicitly disable. Takes precedence over 'enable'. Useful for inheriting from a base profile and carving out specific techniques.",
+          "items": {
+            "$ref": "#/definitions/TechniqueId"
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
+
+    "options": {
+      "type": "object",
+      "description": "Per-technique and global options. Keys are technique IDs or well-known option keys. Values are technique-specific configuration objects. Unknown option keys are passed through to the corresponding technique loader.",
+      "additionalProperties": true,
+      "properties": {
+
+        "rate_limit": {
+          "type": "object",
+          "description": "Profile-level rate limiting. Overrides scope.yaml defaults for this profile only.",
+          "additionalProperties": false,
+          "properties": {
+            "rps": {
+              "type": "number",
+              "description": "Maximum requests per second.",
+              "minimum": 0.01,
+              "maximum": 100,
+              "examples": [0.5, 1.0, 5.0]
+            },
+            "jitter_seconds": {
+              "type": "number",
+              "description": "Maximum random jitter between requests in seconds.",
+              "minimum": 0,
+              "maximum": 60
+            },
+            "max_concurrent": {
+              "type": "integer",
+              "description": "Maximum concurrent technique coroutines.",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 1
+            }
+          }
+        },
+
+        "stealth": {
+          "oneOf": [
+            {
+              "type": "boolean",
+              "description": "Enable or disable stealth mode for this profile."
+            },
+            {
+              "type": "object",
+              "description": "Fine-grained stealth configuration.",
+              "additionalProperties": false,
+              "properties": {
+                "rotate_user_agent": {
+                  "type": "boolean",
+                  "description": "Rotate User-Agent headers between requests.",
+                  "default": false
+                },
+                "add_jitter": {
+                  "type": "boolean",
+                  "description": "Add random delay jitter between requests.",
+                  "default": true
+                },
+                "avoid_burst": {
+                  "type": "boolean",
+                  "description": "Avoid sending multiple requests in rapid succession.",
+                  "default": true
+                }
+              }
+            }
+          ]
+        },
+
+        "model_identity": {
+          "type": "object",
+          "description": "Options for active.model_identity technique.",
+          "additionalProperties": true,
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 3
+            },
+            "try_contradiction": {
+              "type": "boolean",
+              "default": true
+            },
+            "try_indirect": {
+              "type": "boolean",
+              "default": true
+            },
+            "try_roleplay": {
+              "type": "boolean",
+              "default": false
+            },
+            "confidence_threshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.7,
+              "description": "Minimum confidence score (0-1) to report a vendor match."
+            }
+          }
+        },
+
+        "context_window": {
+          "type": "object",
+          "description": "Options for active.context_window technique.",
+          "additionalProperties": true,
+          "properties": {
+            "max_test_tokens": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 10000000,
+              "default": 128000
+            },
+            "step_size": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 131072,
+              "default": 8192
+            },
+            "binary_search": {
+              "type": "boolean",
+              "default": true
+            },
+            "marker_length": {
+              "type": "integer",
+              "minimum": 8,
+              "maximum": 512,
+              "default": 64
+            }
+          }
+        },
+
+        "guardrail_probe": {
+          "type": "object",
+          "description": "Options for active.guardrail_probe technique.",
+          "additionalProperties": true,
+          "properties": {
+            "categories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "max_probes_per_category": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 3
+            }
+          }
+        },
+
+        "rag_mapping": {
+          "type": "object",
+          "description": "Options for active.rag_mapping technique.",
+          "additionalProperties": true,
+          "properties": {
+            "topics": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "List of topic strings to probe for in the RAG corpus."
+            },
+            "queries_per_topic": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 5,
+              "description": "Number of query variations to generate per topic."
+            },
+            "extract_metadata": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+
+        "mcp_enum": {
+          "type": "object",
+          "description": "Options for active.mcp_enum technique.",
+          "additionalProperties": true,
+          "properties": {
+            "enumerate_tools": {"type": "boolean", "default": true},
+            "enumerate_resources": {"type": "boolean", "default": true},
+            "enumerate_prompts": {"type": "boolean", "default": true},
+            "test_dangerous_tools": {"type": "boolean", "default": true}
+          }
+        }
+      }
+    },
+
+    "extends": {
+      "type": "string",
+      "description": "Name of a base profile to inherit from. The current profile's enable/disable lists and options are merged on top of the base profile. Useful for creating profile variants without full duplication.",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "examples": ["blackbox_saas", "internal_enterprise"]
+    },
+
+    "tags": {
+      "type": "array",
+      "description": "Descriptive tags for profile categorization and filtering.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "uniqueItems": true,
+      "examples": [["rag", "passive"], ["ctf", "high-intrusiveness", "lab-only"]]
+    }
+  },
+
+  "definitions": {
+    "TechniqueId": {
+      "type": "string",
+      "description": "Technique identifier in dot-notation category.name format.",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "examples": [
+        "passive.header_fingerprint",
+        "active.model_identity",
+        "active.rag_mapping",
+        "infra.side_channel_timing",
+        "evasion.honeypot_detect",
+        "adapters.siem_query"
+      ]
+    }
+  }
+}

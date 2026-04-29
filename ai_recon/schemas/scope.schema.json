@@ -1,0 +1,495 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-recon.io/schemas/scope.schema.json",
+  "title": "ai-recon Scope Configuration",
+  "description": "Validation schema for scope.yaml — defines engagement boundaries, authorization, targets, authentication, and operational constraints for an ai-recon assessment.",
+  "type": "object",
+  "required": ["schema_version", "engagement", "scope"],
+  "additionalProperties": false,
+  "properties": {
+
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version for this scope file. Must match the ai-recon version that will consume it.",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "examples": ["1.0", "1.1"]
+    },
+
+    "engagement": {
+      "type": "object",
+      "description": "Metadata about the assessment engagement for audit trail and authorization tracking.",
+      "required": ["name", "authorization_ref", "contact"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable name for this engagement.",
+          "minLength": 1,
+          "maxLength": 128,
+          "examples": ["AcmeCorp AI Chatbot Assessment Q2 2025"]
+        },
+        "authorization_ref": {
+          "type": "string",
+          "description": "Reference to written authorization document (ticket ID, contract number, or URL to signed authorization letter).",
+          "minLength": 1,
+          "examples": ["PENTEST-2025-042", "https://tickets.acme.com/SEC-1234"]
+        },
+        "contact": {
+          "type": "object",
+          "description": "Primary point of contact for authorization verification.",
+          "required": ["name", "email"],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Full name of the authorizing contact.",
+              "minLength": 1
+            },
+            "email": {
+              "type": "string",
+              "description": "Email address of the authorizing contact.",
+              "format": "email"
+            },
+            "phone": {
+              "type": "string",
+              "description": "Optional phone number for emergency contact.",
+              "pattern": "^\\+?[0-9\\s\\-().]{7,20}$"
+            },
+            "team": {
+              "type": "string",
+              "description": "Team or department of the contact.",
+              "examples": ["Security Engineering", "Red Team", "IT Risk & Compliance"]
+            }
+          }
+        },
+        "start_date": {
+          "type": "string",
+          "description": "ISO 8601 date when the engagement begins.",
+          "format": "date",
+          "examples": ["2025-06-01"]
+        },
+        "end_date": {
+          "type": "string",
+          "description": "ISO 8601 date when the engagement ends. No probing should occur after this date.",
+          "format": "date",
+          "examples": ["2025-06-30"]
+        },
+        "classification": {
+          "type": "string",
+          "description": "Data classification for the engagement findings.",
+          "enum": ["public", "internal", "confidential", "restricted"],
+          "default": "confidential"
+        }
+      }
+    },
+
+    "scope": {
+      "type": "object",
+      "description": "Explicit allow and deny lists defining the assessment boundary.",
+      "required": ["allow"],
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "type": "array",
+          "description": "Targets explicitly in scope. At least one entry required.",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/ScopeTarget"
+          }
+        },
+        "deny": {
+          "type": "array",
+          "description": "Targets explicitly excluded from scope. Takes precedence over allow list.",
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/ScopeTarget"
+          }
+        }
+      }
+    },
+
+    "discovery": {
+      "type": "object",
+      "description": "Configuration for automated service discovery and port scanning.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether to perform automated service discovery.",
+          "default": false
+        },
+        "methods": {
+          "type": "array",
+          "description": "Discovery methods to use.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "dns_resolution",
+              "reverse_dns",
+              "http_probe",
+              "tcp_connect",
+              "tls_handshake",
+              "shodan_lookup",
+              "censys_lookup",
+              "passive_dns"
+            ]
+          },
+          "default": ["dns_resolution", "http_probe"]
+        },
+        "tcp_ports": {
+          "type": "array",
+          "description": "TCP ports to probe during discovery.",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "default": [80, 443, 1234, 4000, 8000, 8080, 11434],
+          "examples": [[80, 443, 8000, 8080, 11434]]
+        },
+        "dns_wordlist": {
+          "type": "string",
+          "description": "Path to a subdomain wordlist file for DNS enumeration.",
+          "examples": ["/usr/share/wordlists/dns/subdomains-top1million-5000.txt"]
+        }
+      }
+    },
+
+    "auth": {
+      "type": "object",
+      "description": "Authentication configuration for probing authenticated endpoints.",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "description": "Default authentication to use for all in-scope targets unless overridden.",
+          "$ref": "#/definitions/AuthConfig"
+        },
+        "overrides": {
+          "type": "array",
+          "description": "Per-target authentication overrides.",
+          "items": {
+            "type": "object",
+            "required": ["target", "auth"],
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "type": "string",
+                "description": "Host, CIDR, or URL prefix this override applies to.",
+                "examples": ["api.acme.com", "192.168.1.0/24", "https://internal.acme.com/v1"]
+              },
+              "auth": {
+                "$ref": "#/definitions/AuthConfig"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "adapters": {
+      "type": "object",
+      "description": "Configuration for external system adapters (SIEM, repo, secrets manager).",
+      "additionalProperties": false,
+      "properties": {
+        "siem": {
+          "type": "object",
+          "description": "SIEM integration for querying security logs.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "type": {
+              "type": "string",
+              "enum": ["splunk", "elastic_siem", "sentinel", "sumologic", "datadog", "chronicle"],
+              "description": "SIEM platform type."
+            },
+            "endpoint": {
+              "type": "string",
+              "format": "uri",
+              "description": "SIEM API endpoint URL."
+            },
+            "auth_env_var": {
+              "type": "string",
+              "description": "Environment variable name containing the SIEM API token.",
+              "examples": ["SPLUNK_TOKEN", "ELASTIC_API_KEY"]
+            },
+            "index": {
+              "type": "string",
+              "description": "SIEM index or data view to query.",
+              "examples": ["main", "logs-*", "ai-gateway-*"]
+            }
+          }
+        },
+        "repo": {
+          "type": "object",
+          "description": "Source code repository access for passive mining.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "type": {
+              "type": "string",
+              "enum": ["github", "gitlab", "bitbucket", "local_path"],
+              "description": "Repository platform type."
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "description": "Repository URL or organization URL.",
+              "examples": ["https://github.com/acme-corp/ai-chatbot"]
+            },
+            "local_path": {
+              "type": "string",
+              "description": "Local filesystem path to cloned repository.",
+              "examples": ["/home/operator/repos/ai-chatbot"]
+            },
+            "auth_env_var": {
+              "type": "string",
+              "description": "Environment variable containing the repository access token.",
+              "examples": ["GITHUB_TOKEN", "GITLAB_PAT"]
+            },
+            "branch": {
+              "type": "string",
+              "description": "Branch to analyze.",
+              "default": "main"
+            }
+          }
+        },
+        "secrets": {
+          "type": "object",
+          "description": "Secrets manager integration for retrieving target credentials.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "type": {
+              "type": "string",
+              "enum": ["vault", "aws_secretsmanager", "azure_keyvault", "gcp_secretmanager", "1password"],
+              "description": "Secrets manager platform."
+            },
+            "endpoint": {
+              "type": "string",
+              "format": "uri",
+              "description": "Secrets manager API endpoint.",
+              "examples": ["https://vault.acme.com:8200"]
+            },
+            "auth_env_var": {
+              "type": "string",
+              "description": "Environment variable containing the secrets manager auth token.",
+              "examples": ["VAULT_TOKEN", "AWS_SESSION_TOKEN"]
+            }
+          }
+        }
+      }
+    },
+
+    "intrusiveness_max": {
+      "type": "string",
+      "description": "Global maximum intrusiveness level. Overrides any profile setting that exceeds this level. Acts as a hard ceiling regardless of which profile is selected.",
+      "enum": ["info", "low", "medium", "high"],
+      "default": "low"
+    },
+
+    "rate_limit": {
+      "type": "object",
+      "description": "Global rate limiting configuration to avoid overwhelming targets or triggering defenses.",
+      "additionalProperties": false,
+      "properties": {
+        "rps": {
+          "type": "number",
+          "description": "Maximum requests per second across all techniques.",
+          "minimum": 0.01,
+          "maximum": 100,
+          "default": 0.5,
+          "examples": [0.5, 1.0, 2.0]
+        },
+        "jitter_seconds": {
+          "type": "number",
+          "description": "Maximum random jitter in seconds to add between requests.",
+          "minimum": 0,
+          "maximum": 60,
+          "default": 2.0
+        },
+        "burst_limit": {
+          "type": "integer",
+          "description": "Maximum number of requests to send in a burst before enforcing delay.",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 5
+        },
+        "respect_retry_after": {
+          "type": "boolean",
+          "description": "Honor Retry-After headers from rate-limited responses.",
+          "default": true
+        }
+      }
+    },
+
+    "stealth": {
+      "type": "boolean",
+      "description": "Enable stealth mode globally. Adds jitter, rotates User-Agent headers, avoids burst patterns, and skips any technique that writes to shared state (e.g., modifying RAG corpus). Overrides per-technique stealth settings.",
+      "default": false
+    },
+
+    "output": {
+      "type": "object",
+      "description": "Output and reporting configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["json", "yaml", "html", "markdown", "sarif"],
+          "default": "json",
+          "description": "Primary output format for the findings report."
+        },
+        "path": {
+          "type": "string",
+          "description": "Output file path for the report.",
+          "examples": ["./reports/acme-ai-recon-2025-06-01.json"]
+        },
+        "redact_pii": {
+          "type": "boolean",
+          "description": "Apply PII redaction patterns from pii_patterns.yaml to all logged responses before writing.",
+          "default": true
+        },
+        "include_raw_responses": {
+          "type": "boolean",
+          "description": "Include full raw API response bodies in the report. May contain sensitive data.",
+          "default": false
+        }
+      }
+    }
+  },
+
+  "definitions": {
+
+    "ScopeTarget": {
+      "type": "object",
+      "description": "A target definition for the scope allow or deny list.",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "cidr": {
+          "type": "string",
+          "description": "CIDR notation IP range.",
+          "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+          "examples": ["10.0.1.0/24", "192.168.100.0/28"]
+        },
+        "host": {
+          "type": "string",
+          "description": "Hostname or IP address.",
+          "examples": ["api.acme.com", "192.168.1.50", "chat.internal.corp"]
+        },
+        "url_prefix": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL prefix — only URLs under this prefix are in scope.",
+          "examples": ["https://api.acme.com/v1/chat", "http://internal:8080/api/"]
+        },
+        "ports": {
+          "type": "array",
+          "description": "Specific ports in scope for this target. Empty means all ports.",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "examples": [[443, 8443], [8000, 11434]]
+        },
+        "note": {
+          "type": "string",
+          "description": "Human-readable note explaining why this target is included or excluded.",
+          "examples": ["Primary production chat endpoint", "Staging — out of scope per client request"]
+        }
+      }
+    },
+
+    "AuthConfig": {
+      "type": "object",
+      "description": "Authentication configuration for a target endpoint.",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "Authentication mechanism.",
+          "enum": [
+            "none",
+            "bearer_token",
+            "api_key_header",
+            "api_key_query",
+            "basic_auth",
+            "oauth2_client_credentials",
+            "aws_sigv4",
+            "azure_managed_identity",
+            "gcp_adc",
+            "custom_header"
+          ]
+        },
+        "env_var": {
+          "type": "string",
+          "description": "Environment variable containing the credential value. Preferred over inline values.",
+          "examples": ["TARGET_API_KEY", "BEARER_TOKEN", "OPENAI_API_KEY"]
+        },
+        "header_name": {
+          "type": "string",
+          "description": "HTTP header name for api_key_header and custom_header kinds.",
+          "examples": ["X-API-Key", "Authorization", "x-custom-auth"]
+        },
+        "header_value_prefix": {
+          "type": "string",
+          "description": "Prefix prepended to the credential value in the header.",
+          "examples": ["Bearer ", "Key ", "ApiKey "]
+        },
+        "query_param": {
+          "type": "string",
+          "description": "Query parameter name for api_key_query kind.",
+          "examples": ["api_key", "token", "access_token"]
+        },
+        "username_env_var": {
+          "type": "string",
+          "description": "Environment variable for basic auth username.",
+          "examples": ["BASIC_AUTH_USER"]
+        },
+        "password_env_var": {
+          "type": "string",
+          "description": "Environment variable for basic auth password.",
+          "examples": ["BASIC_AUTH_PASS"]
+        },
+        "token_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "OAuth2 token endpoint URL for client_credentials flow.",
+          "examples": ["https://auth.acme.com/oauth/token"]
+        },
+        "client_id_env_var": {
+          "type": "string",
+          "description": "Environment variable for OAuth2 client ID.",
+          "examples": ["OAUTH_CLIENT_ID"]
+        },
+        "client_secret_env_var": {
+          "type": "string",
+          "description": "Environment variable for OAuth2 client secret.",
+          "examples": ["OAUTH_CLIENT_SECRET"]
+        },
+        "aws_region": {
+          "type": "string",
+          "description": "AWS region for SigV4 signing.",
+          "examples": ["us-east-1", "eu-west-1"]
+        },
+        "aws_service": {
+          "type": "string",
+          "description": "AWS service name for SigV4 signing.",
+          "default": "bedrock",
+          "examples": ["bedrock", "execute-api"]
+        }
+      }
+    }
+  }
+}

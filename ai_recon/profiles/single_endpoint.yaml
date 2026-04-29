@@ -1,0 +1,100 @@
+# single_endpoint.yaml — Minimal profile for testing a single chat endpoint
+# Lightweight profile suitable for quick spot-checks of a specific chat
+# endpoint without broad infrastructure reconnaissance.
+#
+# Intrusiveness: low — conversation-only probes, no infrastructure scanning.
+---
+
+name: single_endpoint
+description: >
+  Minimal profile for testing a single chat endpoint. Only performs essential
+  header fingerprinting, health probing, OpenAI compatibility detection,
+  model identity resolution, knowledge cutoff estimation, and basic guardrail
+  checking. Suitable for quick assessments or as a first-pass before running
+  a more comprehensive profile. No repository access or infrastructure probing.
+intrusiveness_max: low
+
+techniques:
+  enable:
+    - passive.header_fingerprint
+    - passive.health_probe
+    - passive.openai_compat_probe
+    - active.model_identity
+    - active.model_cutoff
+    - active.guardrail_probe
+
+  disable:
+    - passive.tls_metadata
+    - passive.dns_recon
+    - passive.js_config_extract
+    - passive.repo_mining
+    - passive.env_file_scan
+    - passive.dependency_audit
+    - active.service_discovery
+    - active.status_triage
+    - active.gateway_detect
+    - active.model_contradiction
+    - active.model_behavior
+    - active.context_window
+    - active.tokenizer_probe
+    - active.system_prompt_probe
+    - active.rag_boundary
+    - active.rag_mapping
+    - active.rag_threshold
+    - active.mcp_enum
+    - active.a2a_enum
+    - active.tool_enum
+    - active.prompt_injection
+    - active.indirect_injection
+    - active.jailbreak_suite
+    - infra.side_channel_timing
+    - infra.cost_oracle
+    - infra.vector_db_probe
+    - infra.inference_server_probe
+    - evasion.honeypot_detect
+    - evasion.siem_evasion_test
+    - adapters.siem_query
+
+options:
+  model_identity:
+    max_attempts: 2
+    try_contradiction: false
+    try_indirect: true
+    confidence_threshold: 0.5
+
+  model_cutoff:
+    event_probes:
+      - cutoff_event_2024
+      - cutoff_direct
+    max_probes: 2
+
+  guardrail_probe:
+    categories:
+      - jailbreak_classic
+    max_probes_per_category: 1
+
+  passive.header_fingerprint:
+    follow_redirects: true
+    capture_all_headers: true
+
+  passive.health_probe:
+    paths:
+      - /health
+      - /healthz
+      - /v1/models
+      - /api/version
+
+  passive.openai_compat_probe:
+    test_models_endpoint: true
+    test_chat_endpoint: true
+    capture_model_list: true
+
+  rate_limit:
+    rps: 0.5
+    jitter_seconds: 1.0
+    max_concurrent: 1
+
+  stealth:
+    rotate_user_agent: false
+    add_jitter: true
+    avoid_burst: true

@@ -1,0 +1,381 @@
+# vendors.yaml — LLM vendor catalog for fingerprinting
+# Each entry defines a vendor with model families, self-identification patterns,
+# knowledge cutoff dates, behavioral signatures, and context window hints.
+---
+
+vendors:
+
+  - id: meta-llama
+    display_name: "Meta (Llama)"
+    families:
+      - llama-2
+      - llama-3
+      - llama-3.1
+      - llama-3.2
+      - llama-4
+    self_id_patterns:
+      - "(?i)\\bllama[-\\s]?2\\b"
+      - "(?i)\\bllama[-\\s]?3\\b"
+      - "(?i)\\bllama[-\\s]?3\\.1\\b"
+      - "(?i)\\bllama[-\\s]?3\\.2\\b"
+      - "(?i)\\bllama[-\\s]?4\\b"
+      - "(?i)\\bmeta(?:\\s+llama)?\\b"
+      - "(?i)\\bcreated by meta\\b"
+      - "(?i)\\bdeveloped by meta(?:\\s+ai)?\\b"
+      - "(?i)\\bi(?:'m| am) llama\\b"
+      - "(?i)\\bopen[\\s-]?source model from meta\\b"
+    typical_cutoffs:
+      llama-2: "2023-07"
+      llama-3: "2023-12"
+      llama-3.1: "2023-12"
+      llama-3.2: "2024-06"
+      llama-4: "2024-12"
+    behavior_signature:
+      verbosity: low
+      docstrings: rare
+      edge_cases: rare
+      arithmetic_accuracy: medium
+      refusal_style: terse
+      markdown_headers: false
+      list_preference: minimal
+    context_window_hints:
+      llama-2: 4096
+      llama-3: 8192
+      llama-3.1: 131072
+      llama-3.2: 131072
+      llama-4: 1048576
+
+  - id: alibaba-qwen
+    display_name: "Alibaba (Qwen)"
+    families:
+      - qwen2
+      - qwen2.5
+      - qwen2.5-coder
+      - qwen3
+    self_id_patterns:
+      - "(?i)\\bqwen[-\\s]?2\\b"
+      - "(?i)\\bqwen[-\\s]?2\\.5\\b"
+      - "(?i)\\bqwen[-\\s]?3\\b"
+      - "(?i)\\bqwen(?:\\s+coder)?\\b"
+      - "(?i)\\balibaba(?:\\s+cloud)?\\b"
+      - "(?i)\\bi(?:'m| am) qwen\\b"
+      - "(?i)\\bdeveloped by alibaba\\b"
+      - "(?i)\\bcreated by alibaba(?:\\s+cloud)?\\b"
+      - "(?i)\\btongyi\\s+qianwen\\b"
+    typical_cutoffs:
+      qwen2: "2024-02"
+      qwen2.5: "2024-09"
+      qwen2.5-coder: "2024-09"
+      qwen3: "2025-01"
+    behavior_signature:
+      verbosity: high
+      docstrings: common
+      edge_cases: common
+      arithmetic_accuracy: high
+      refusal_style: elaborate
+      markdown_headers: true
+      list_preference: extensive
+    context_window_hints:
+      qwen2: 32768
+      qwen2.5: 131072
+      qwen2.5-coder: 131072
+      qwen3: 1048576
+
+  - id: openai
+    display_name: "OpenAI"
+    families:
+      - gpt-3.5-turbo
+      - gpt-4
+      - gpt-4o
+      - gpt-4.1
+      - gpt-5
+      - gpt-5.2-turbo
+    self_id_patterns:
+      - "(?i)\\bgpt[-\\s]?3\\.5\\b"
+      - "(?i)\\bgpt[-\\s]?4\\b"
+      - "(?i)\\bgpt[-\\s]?4o\\b"
+      - "(?i)\\bgpt[-\\s]?4\\.1\\b"
+      - "(?i)\\bgpt[-\\s]?5\\b"
+      - "(?i)\\bgpt[-\\s]?5\\.2\\b"
+      - "(?i)\\bchatgpt\\b"
+      - "(?i)\\bi(?:'m| am) (?:a )?(?:an )?(?:gpt|openai|chatgpt)\\b"
+      - "(?i)\\bdeveloped by openai\\b"
+      - "(?i)\\bcreated by openai\\b"
+      - "(?i)\\bpowered by openai\\b"
+      - "(?i)\\bopenai'?s language model\\b"
+    typical_cutoffs:
+      gpt-3.5-turbo: "2021-09"
+      gpt-4: "2023-04"
+      gpt-4o: "2023-10"
+      gpt-4.1: "2024-06"
+      gpt-5: "2025-01"
+      gpt-5.2-turbo: "2025-06"
+    behavior_signature:
+      verbosity: medium
+      docstrings: common
+      edge_cases: medium
+      arithmetic_accuracy: medium
+      refusal_style: polite-firm
+      markdown_headers: true
+      list_preference: moderate
+    context_window_hints:
+      gpt-3.5-turbo: 16384
+      gpt-4: 128000
+      gpt-4o: 128000
+      gpt-4.1: 1047576
+      gpt-5: 1047576
+      gpt-5.2-turbo: 1047576
+
+  - id: anthropic
+    display_name: "Anthropic (Claude)"
+    families:
+      - claude-3-haiku
+      - claude-3-sonnet
+      - claude-3-opus
+      - claude-3.5-sonnet
+      - claude-3.5-haiku
+      - claude-4-sonnet
+      - claude-4-opus
+      - claude-4.5
+      - claude-4.6
+      - claude-4.7
+    self_id_patterns:
+      - "(?i)\\bclaude[-\\s]?3\\b"
+      - "(?i)\\bclaude[-\\s]?3\\.5\\b"
+      - "(?i)\\bclaude[-\\s]?4\\b"
+      - "(?i)\\bclaude[-\\s]?4\\.5\\b"
+      - "(?i)\\bclaude[-\\s]?4\\.6\\b"
+      - "(?i)\\bclaude[-\\s]?4\\.7\\b"
+      - "(?i)\\bhaiku\\b"
+      - "(?i)\\bsonnet\\b"
+      - "(?i)\\bopus\\b"
+      - "(?i)\\bi(?:'m| am) claude\\b"
+      - "(?i)\\bdeveloped by anthropic\\b"
+      - "(?i)\\bcreated by anthropic\\b"
+      - "(?i)\\banthropics?'?s? (?:ai|model|assistant)\\b"
+      - "(?i)\\bconstitutional ai\\b"
+    typical_cutoffs:
+      claude-3-haiku: "2023-08"
+      claude-3-sonnet: "2023-08"
+      claude-3-opus: "2023-08"
+      claude-3.5-sonnet: "2024-04"
+      claude-3.5-haiku: "2024-07"
+      claude-4-sonnet: "2025-01"
+      claude-4-opus: "2025-01"
+      claude-4.5: "2025-03"
+      claude-4.6: "2025-04"
+      claude-4.7: "2025-06"
+    behavior_signature:
+      verbosity: high
+      docstrings: common
+      edge_cases: common
+      arithmetic_accuracy: high
+      refusal_style: explanatory
+      markdown_headers: true
+      list_preference: extensive
+    context_window_hints:
+      claude-3-haiku: 200000
+      claude-3-sonnet: 200000
+      claude-3-opus: 200000
+      claude-3.5-sonnet: 200000
+      claude-3.5-haiku: 200000
+      claude-4-sonnet: 200000
+      claude-4-opus: 200000
+      claude-4.5: 200000
+      claude-4.6: 200000
+      claude-4.7: 200000
+
+  - id: google
+    display_name: "Google (Gemini)"
+    families:
+      - gemini-1.5-pro
+      - gemini-1.5-flash
+      - gemini-2.0-flash
+      - gemini-2.5-pro
+    self_id_patterns:
+      - "(?i)\\bgemini[-\\s]?1\\.5\\b"
+      - "(?i)\\bgemini[-\\s]?2\\.0\\b"
+      - "(?i)\\bgemini[-\\s]?2\\.5\\b"
+      - "(?i)\\bgemini(?:\\s+pro|\\s+flash|\\s+ultra)?\\b"
+      - "(?i)\\bi(?:'m| am) gemini\\b"
+      - "(?i)\\bdeveloped by google\\b"
+      - "(?i)\\bcreated by google(?:\\s+deepmind)?\\b"
+      - "(?i)\\bgoogle(?:\\s+deepmind)?'?s? (?:ai|model|assistant)\\b"
+      - "(?i)\\bbard\\b"
+    typical_cutoffs:
+      gemini-1.5-pro: "2023-11"
+      gemini-1.5-flash: "2023-11"
+      gemini-2.0-flash: "2024-06"
+      gemini-2.5-pro: "2025-01"
+    behavior_signature:
+      verbosity: medium
+      docstrings: common
+      edge_cases: medium
+      arithmetic_accuracy: high
+      refusal_style: structured
+      markdown_headers: true
+      list_preference: moderate
+    context_window_hints:
+      gemini-1.5-pro: 2097152
+      gemini-1.5-flash: 1048576
+      gemini-2.0-flash: 1048576
+      gemini-2.5-pro: 2097152
+
+  - id: mistral
+    display_name: "Mistral AI"
+    families:
+      - mistral-7b
+      - mixtral-8x7b
+      - mistral-large
+      - mistral-small
+    self_id_patterns:
+      - "(?i)\\bmistral[-\\s]?7b\\b"
+      - "(?i)\\bmixtral\\b"
+      - "(?i)\\bmistral[-\\s]?(?:large|small|medium|nemo)\\b"
+      - "(?i)\\bi(?:'m| am) mistral\\b"
+      - "(?i)\\bdeveloped by mistral(?:\\s+ai)?\\b"
+      - "(?i)\\bcreated by mistral(?:\\s+ai)?\\b"
+      - "(?i)\\bmistral(?:\\s+ai)?'?s? (?:ai|model|assistant)\\b"
+    typical_cutoffs:
+      mistral-7b: "2023-09"
+      mixtral-8x7b: "2023-12"
+      mistral-large: "2024-03"
+      mistral-small: "2024-06"
+    behavior_signature:
+      verbosity: medium
+      docstrings: medium
+      edge_cases: medium
+      arithmetic_accuracy: medium
+      refusal_style: concise
+      markdown_headers: true
+      list_preference: moderate
+    context_window_hints:
+      mistral-7b: 32768
+      mixtral-8x7b: 32768
+      mistral-large: 131072
+      mistral-small: 131072
+
+  - id: deepseek
+    display_name: "DeepSeek"
+    families:
+      - deepseek-v2
+      - deepseek-v3
+      - deepseek-r1
+      - deepseek-coder
+    self_id_patterns:
+      - "(?i)\\bdeepseek[-\\s]?v2\\b"
+      - "(?i)\\bdeepseek[-\\s]?v3\\b"
+      - "(?i)\\bdeepseek[-\\s]?r1\\b"
+      - "(?i)\\bdeepseek[-\\s]?coder\\b"
+      - "(?i)\\bi(?:'m| am) deepseek\\b"
+      - "(?i)\\bdeveloped by deepseek\\b"
+      - "(?i)\\bcreated by deepseek\\b"
+      - "(?i)\\bdeepseek(?:\\s+ai)?'?s? (?:ai|model|assistant)\\b"
+    typical_cutoffs:
+      deepseek-v2: "2024-05"
+      deepseek-v3: "2024-11"
+      deepseek-r1: "2025-01"
+      deepseek-coder: "2024-05"
+    behavior_signature:
+      verbosity: medium
+      docstrings: common
+      edge_cases: medium
+      arithmetic_accuracy: high
+      refusal_style: direct
+      markdown_headers: true
+      list_preference: moderate
+    context_window_hints:
+      deepseek-v2: 131072
+      deepseek-v3: 131072
+      deepseek-r1: 131072
+      deepseek-coder: 16384
+
+  - id: cohere
+    display_name: "Cohere"
+    families:
+      - command-r
+      - command-r-plus
+    self_id_patterns:
+      - "(?i)\\bcommand[-\\s]?r(?:\\+|\\s*plus)?\\b"
+      - "(?i)\\bcohere'?s? (?:ai|model|assistant)\\b"
+      - "(?i)\\bi(?:'m| am) command\\b"
+      - "(?i)\\bdeveloped by cohere\\b"
+      - "(?i)\\bcreated by cohere\\b"
+      - "(?i)\\bcohere(?:\\s+command)?\\b"
+    typical_cutoffs:
+      command-r: "2024-03"
+      command-r-plus: "2024-04"
+    behavior_signature:
+      verbosity: medium
+      docstrings: medium
+      edge_cases: medium
+      arithmetic_accuracy: medium
+      refusal_style: balanced
+      markdown_headers: true
+      list_preference: moderate
+    context_window_hints:
+      command-r: 131072
+      command-r-plus: 131072
+
+  - id: xai-grok
+    display_name: "xAI (Grok)"
+    families:
+      - grok-1
+      - grok-2
+      - grok-3
+    self_id_patterns:
+      - "(?i)\\bgrok[-\\s]?1\\b"
+      - "(?i)\\bgrok[-\\s]?2\\b"
+      - "(?i)\\bgrok[-\\s]?3\\b"
+      - "(?i)\\bi(?:'m| am) grok\\b"
+      - "(?i)\\bdeveloped by x(?:\\.ai|ai)?\\b"
+      - "(?i)\\bcreated by x(?:\\.ai|ai)?\\b"
+      - "(?i)\\bxai'?s? (?:ai|model|assistant)\\b"
+      - "(?i)\\belon musk'?s? ai\\b"
+    typical_cutoffs:
+      grok-1: "2023-11"
+      grok-2: "2024-10"
+      grok-3: "2025-02"
+    behavior_signature:
+      verbosity: medium
+      docstrings: medium
+      edge_cases: medium
+      arithmetic_accuracy: medium
+      refusal_style: blunt
+      markdown_headers: false
+      list_preference: minimal
+    context_window_hints:
+      grok-1: 8192
+      grok-2: 131072
+      grok-3: 131072
+
+  - id: microsoft-phi
+    display_name: "Microsoft (Phi)"
+    families:
+      - phi-3-mini
+      - phi-3-medium
+      - phi-3.5
+    self_id_patterns:
+      - "(?i)\\bphi[-\\s]?3(?:\\s*mini|\\s*medium|\\s*small)?\\b"
+      - "(?i)\\bphi[-\\s]?3\\.5\\b"
+      - "(?i)\\bi(?:'m| am) phi\\b"
+      - "(?i)\\bdeveloped by microsoft\\b"
+      - "(?i)\\bcreated by microsoft(?:\\s+research)?\\b"
+      - "(?i)\\bmicrosoft(?:\\s+phi)?'?s? (?:ai|model|assistant)\\b"
+      - "(?i)\\bsmall language model\\b"
+    typical_cutoffs:
+      phi-3-mini: "2023-10"
+      phi-3-medium: "2023-10"
+      phi-3.5: "2024-05"
+    behavior_signature:
+      verbosity: low
+      docstrings: rare
+      edge_cases: rare
+      arithmetic_accuracy: medium
+      refusal_style: terse
+      markdown_headers: false
+      list_preference: minimal
+    context_window_hints:
+      phi-3-mini: 128000
+      phi-3-medium: 128000
+      phi-3.5: 128000

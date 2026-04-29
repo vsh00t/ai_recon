@@ -1,0 +1,235 @@
+# internal_enterprise.yaml — Full internal enterprise engagement profile
+# Comprehensive assessment including repository mining, RAG pipeline auditing,
+# agent enumeration, and SIEM evasion testing. Requires internal access,
+# valid credentials, and repository read permissions.
+#
+# Intrusiveness: medium — includes RAG probing and injection testing, but
+# excludes destructive operations and high-risk jailbreaks.
+#
+# WARNING: Only use with explicit written authorization from the asset owner.
+---
+
+name: internal_enterprise
+description: >
+  Full internal engagement with access to credentials, repositories, and
+  internal network. Enables repo mining, dependency auditing, SIEM evasion
+  testing, and comprehensive RAG pipeline analysis. Suitable for red team
+  assessments or internal security reviews with full organizational cooperation.
+  Intrusiveness capped at medium — no destructive jailbreaks or data exfiltration.
+intrusiveness_max: medium
+
+techniques:
+  enable:
+    # ── Passive Reconnaissance ─────────────────────────────────────────────
+    - passive.header_fingerprint
+    - passive.health_probe
+    - passive.openai_compat_probe
+    - passive.tls_metadata
+    - passive.dns_recon
+    - passive.js_config_extract
+    - passive.repo_mining
+    - passive.env_file_scan
+    - passive.dependency_audit
+    - passive.docker_label_inspect
+    - passive.ci_config_scan
+    - passive.k8s_manifest_scan
+
+    # ── Active Model Probing ───────────────────────────────────────────────
+    - active.service_discovery
+    - active.status_triage
+    - active.gateway_detect
+    - active.model_identity
+    - active.model_contradiction
+    - active.model_cutoff
+    - active.model_behavior
+    - active.context_window
+    - active.tokenizer_probe
+    - active.guardrail_probe
+    - active.system_prompt_probe
+
+    # ── RAG Pipeline ──────────────────────────────────────────────────────
+    - active.rag_boundary
+    - active.rag_mapping
+    - active.rag_threshold
+    - active.rag_metadata_leak
+
+    # ── Agent / Tool Enumeration ──────────────────────────────────────────
+    - active.mcp_enum
+    - active.a2a_enum
+    - active.tool_enum
+
+    # ── Injection Testing ─────────────────────────────────────────────────
+    - active.prompt_injection
+    - active.indirect_injection
+
+    # ── Infrastructure ─────────────────────────────────────────────────────
+    - infra.side_channel_timing
+    - infra.cost_oracle
+    - infra.vector_db_probe
+    - infra.inference_server_probe
+
+    # ── Evasion / Safety ──────────────────────────────────────────────────
+    - evasion.honeypot_detect
+    - evasion.siem_evasion_test
+
+    # ── SIEM / Logging ────────────────────────────────────────────────────
+    - adapters.siem_query
+
+  disable:
+    # High-intrusiveness techniques excluded from medium-cap profile
+    - active.jailbreak_suite
+    - active.rag_inversion
+    - active.data_exfiltration_test
+
+options:
+  model_identity:
+    max_attempts: 5
+    try_contradiction: true
+    try_indirect: true
+    try_roleplay: true
+    confidence_threshold: 0.6
+
+  context_window:
+    max_test_tokens: 500000
+    step_size: 16384
+    binary_search: true
+    marker_length: 128
+
+  model_behavior:
+    run_arithmetic: true
+    run_coding: true
+    run_reasoning: true
+    run_verbosity_analysis: true
+    run_instruction_following: true
+
+  guardrail_probe:
+    categories:
+      - violence
+      - pii_request
+      - jailbreak_classic
+      - jailbreak_persona
+      - system_prompt_extraction
+    max_probes_per_category: 5
+    record_refusal_phrasing: true
+
+  system_prompt_probe:
+    methods:
+      - indirect_meta_question
+      - role_play_bypass
+      - translation_trick
+      - token_smuggling
+    max_attempts: 5
+
+  rag_mapping:
+    topics:
+      - HR policies
+      - employee compensation
+      - security procedures
+      - vendor contracts
+      - financial data
+      - customer records
+      - internal architecture
+      - incident reports
+    queries_per_topic: 8
+    extract_metadata: true
+
+  rag_threshold:
+    test_similarity_boundary: true
+    min_similarity_steps: 10
+
+  mcp_enum:
+    enumerate_tools: true
+    enumerate_resources: true
+    enumerate_prompts: true
+    test_dangerous_tools: true
+    dangerous_tool_patterns:
+      - bash
+      - exec
+      - shell
+      - run_command
+      - write_file
+      - delete_file
+      - fetch
+      - browse
+
+  a2a_enum:
+    discover_peers: true
+    map_communication_channels: true
+    test_trust_boundaries: true
+
+  prompt_injection:
+    delivery_channels:
+      - direct_user_input
+      - crafted_user_message
+    max_attempts: 10
+
+  indirect_injection:
+    delivery_channels:
+      - rag_corpus_injection
+      - tool_output_injection
+      - document_metadata
+    max_attempts: 5
+
+  passive.repo_mining:
+    search_patterns:
+      - "OPENAI_API_KEY"
+      - "ANTHROPIC_API_KEY"
+      - "GOOGLE_API_KEY"
+      - "COHERE_API_KEY"
+      - "sk-"
+      - "pinecone"
+      - "weaviate"
+      - "qdrant"
+      - "chromadb"
+      - "langchain"
+      - "langgraph"
+      - "vector_store"
+      - "embedding"
+    file_patterns:
+      - "**/*.py"
+      - "**/*.env"
+      - "**/*.yaml"
+      - "**/*.yml"
+      - "**/*.json"
+      - "**/.env*"
+      - "**/requirements*.txt"
+      - "**/pyproject.toml"
+    exclude_paths:
+      - "**/node_modules/**"
+      - "**/__pycache__/**"
+      - "**/.git/**"
+
+  passive.dependency_audit:
+    check_pypi: true
+    check_for_known_vulns: true
+    flag_ai_frameworks: true
+
+  evasion.siem_evasion_test:
+    test_rate_limit_bypass: true
+    test_user_agent_variation: true
+    test_ip_rotation_sim: false
+    log_detection_status: true
+
+  adapters.siem_query:
+    lookback_hours: 168
+    search_terms:
+      - "prompt injection"
+      - "jailbreak"
+      - "system prompt"
+      - "DAN"
+
+  infra.side_channel_timing:
+    samples: 20
+    measure_ttft: true
+    measure_total: true
+    jitter_ms: 500
+
+  rate_limit:
+    rps: 1.0
+    jitter_seconds: 1.5
+    max_concurrent: 2
+
+  stealth:
+    rotate_user_agent: false
+    add_jitter: true
+    avoid_burst: false
