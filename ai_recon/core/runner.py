@@ -273,8 +273,12 @@ class Runner:
 
         # Resolve & order techniques
         classes = self._resolve_techniques()
-        self._check_authorization(classes)
+        # Filter by intrusiveness ceiling FIRST, then check authorization only
+        # against techniques that will actually run. Otherwise a passive run on
+        # a profile that lists medium/high techniques would fail the auth gate
+        # even when those techniques are skipped.
         classes = self._filter_by_intrusiveness(classes)
+        self._check_authorization(classes)
         ordered = build_plan(classes)
 
         targets = targets_from_scope(self.scope)
