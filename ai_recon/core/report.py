@@ -343,11 +343,7 @@ def _render_html(r: Report) -> str:
         sf = [f for f in r.findings if f.severity == sev]
         if not sf:
             continue
-        finds_html_parts.append(
-            f'<h3 class="sev-h" style="--c:{_SEV_COLOR[sev]}">'
-            f'<span class="sev-pill" style="background:{_SEV_COLOR[sev]}">{sev.upper()}</span> '
-            f'{len(sf)} finding(s)</h3>'
-        )
+        cards = []
         for f in sf:
             ev = ""
             if f.evidence:
@@ -361,7 +357,7 @@ def _render_html(r: Report) -> str:
                     f'<li><a href="{_esc(x)}" target="_blank" rel="noopener">{_esc(x)}</a></li>'
                     for x in f.references
                 ) + "</ul>"
-            finds_html_parts.append(f"""
+            cards.append(f"""
               <article class="finding" data-sev="{sev}" data-tech="{_esc(f.technique)}">
                 <header>
                   <span class="sev-pill" style="background:{_SEV_COLOR[sev]}">{sev.upper()}</span>
@@ -378,6 +374,19 @@ def _render_html(r: Report) -> str:
                 {ev}
                 {refs}
               </article>""")
+        # critical/high open by default; medium/low/info collapsed
+        is_open = "open" if sev in ("critical", "high", "medium") else ""
+        finds_html_parts.append(f"""
+          <details class="sev-group" data-sev="{sev}" {is_open} style="--c:{_SEV_COLOR[sev]}">
+            <summary>
+              <span class="sev-pill" style="background:{_SEV_COLOR[sev]}">{sev.upper()}</span>
+              <span class="sev-count">{len(sf)} finding{'s' if len(sf)!=1 else ''}</span>
+              <span class="chev">▾</span>
+            </summary>
+            <div class="sev-body">
+              {''.join(cards)}
+            </div>
+          </details>""")
     findings_html = "".join(finds_html_parts) or '<p class="muted">No findings collected.</p>'
 
     eng = r.scope.engagement
@@ -457,6 +466,20 @@ def _render_html(r: Report) -> str:
   details > summary {{ cursor: pointer; color: var(--muted); font-size: .85rem;
                        user-select: none; }}
   details[open] > summary {{ color: var(--ink); }}
+  details.sev-group {{ background: var(--panel); border: 1px solid var(--border);
+                       border-left: 4px solid var(--c); border-radius: 8px;
+                       margin: .65rem 0; padding: 0; }}
+  details.sev-group > summary {{ list-style: none; display: flex;
+                                 align-items: center; gap: .65rem;
+                                 padding: .75rem 1rem; font-size: .95rem;
+                                 color: var(--ink); }}
+  details.sev-group > summary::-webkit-details-marker {{ display: none; }}
+  details.sev-group .sev-count {{ color: var(--muted); font-size: .85rem; }}
+  details.sev-group .chev {{ margin-left: auto; color: var(--muted);
+                             transition: transform .15s ease; }}
+  details.sev-group[open] .chev {{ transform: rotate(180deg); }}
+  details.sev-group .sev-body {{ padding: .25rem 1rem 1rem; }}
+  details.sev-group .finding {{ margin: .5rem 0; }}
   pre {{ background: #060a18; border: 1px solid var(--border); border-radius: 6px;
          padding: .75rem; overflow-x: auto; font-family: var(--mono); font-size: .8rem;
          margin: .5rem 0 0; }}
@@ -464,10 +487,12 @@ def _render_html(r: Report) -> str:
   ul.refs a {{ color: #93b9ff; }}
   .muted {{ color: var(--muted); }}
   .toolbar {{ display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }}
-  .toolbar input, .toolbar select {{
+  .toolbar input, .toolbar select, .toolbar button {{
     background: var(--panel); color: var(--ink); border: 1px solid var(--border);
     border-radius: 6px; padding: .4rem .65rem; font-size: .9rem; font-family: inherit;
   }}
+  .toolbar button {{ cursor: pointer; }}
+  .toolbar button:hover {{ background: #1a2350; }}
   .toolbar input {{ flex: 1; min-width: 200px; }}
   footer {{ margin-top: 3rem; color: var(--muted); font-size: .75rem; text-align: center; }}
 </style>
@@ -503,9 +528,10 @@ def _render_html(r: Report) -> str:
   <div class="toolbar">
     <input id="q" type="search" placeholder="Filter by title, technique, target…">
     <select id="fsev">
-      <option value="">All severities</option>
-      {''.join(f'<option value="{s}">{s.upper()}</option>' for s in _SEV_ORDER if counts[s] > 0)}
+      <option value="">All severities (open by default)</option>
+      {''.join(f'<option value="{s}">Only {s.upper()}</option>' for s in _SEV_ORDER if counts[s] > 0)}
     </select>
+    <button id="toggle-all" type="button">Expand / collapse all</button>
   </div>
   <div id="findings">
     {findings_html}
@@ -517,28 +543,36 @@ def _render_html(r: Report) -> str:
 (function() {{
   const q = document.getElementById('q');
   const fsev = document.getElementById('fsev');
+  const toggle = document.getElementById('toggle-all');
+  const groups = Array.from(document.querySelectorAll('details.sev-group'));
   const items = Array.from(document.querySelectorAll('article.finding'));
+
   function apply() {{
     const term = (q.value || '').toLowerCase().trim();
     const sev = fsev.value;
+
     items.forEach(el => {{
       const text = el.innerText.toLowerCase();
       const okSev = !sev || el.dataset.sev === sev;
       const okTxt = !term || text.includes(term);
       el.style.display = (okSev && okTxt) ? '' : 'none';
     }});
-    // Hide section headers with no visible siblings
-    document.querySelectorAll('h3.sev-h').forEach(h => {{
-      let n = h.nextElementSibling, anyVisible = false;
-      while (n && n.tagName === 'ARTICLE') {{
-        if (n.style.display !== 'none') {{ anyVisible = true; break; }}
-        n = n.nextElementSibling;
-      }}
-      h.style.display = anyVisible ? '' : 'none';
+
+    groups.forEach(g => {{
+      const visible = g.querySelectorAll('article.finding:not([style*="display: none"])').length;
+      const matchesFilter = !sev || g.dataset.sev === sev;
+      g.style.display = (visible > 0 && matchesFilter) ? '' : 'none';
+      // when filtering by severity, force open the matching group
+      if (sev && g.dataset.sev === sev) g.open = true;
     }});
   }}
+
   q.addEventListener('input', apply);
   fsev.addEventListener('change', apply);
+  toggle.addEventListener('click', () => {{
+    const anyClosed = groups.some(g => !g.open);
+    groups.forEach(g => {{ g.open = anyClosed; }});
+  }});
 }})();
 </script>
 </body>
