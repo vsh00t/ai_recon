@@ -367,17 +367,104 @@ def adapter_list() -> None:
 # report ...
 # ---------------------------------------------------------------------------
 
+@report_app.command("list")
+def report_list(
+    cache_dir: Path = typer.Option(None, "--cache-dir"),
+    limit: int = typer.Option(20, "--limit", "-n"),
+) -> None:
+    """List recent runs (most recent first)."""
+    cache = cache_dir or _default_cache_dir()
+    runs = _runs_dir(cache)
+    if not runs.exists():
+        console.print(f"[yellow]No runs at[/yellow] {runs}")
+        return
+    items = []
+    for d in runs.iterdir():
+        if not d.is_dir():
+            continue
+        rj = d / "report.json"
+        if not rj.exists():
+            continue
+        try:
+            r = Report.model_validate_json(rj.read_text())
+            items.append((d.stat().st_mtime, d.name, r))
+        except Exception:
+            continue
+    items.sort(reverse=True)
+    table = Table(title=f"Runs in {runs}")
+    table.add_column("run_id", style="cyan", no_wrap=True)
+    table.add_column("profile")
+    table.add_column("findings", justify="right")
+    table.add_column("crit/high/med/low/info", justify="right")
+    table.add_column("started", overflow="ellipsis")
+    for _, rid, r in items[:limit]:
+        c = {s: 0 for s in ("critical", "high", "medium", "low", "info")}
+        for f in r.findings:
+            c[f.severity] = c.get(f.severity, 0) + 1
+        table.add_row(
+            rid,
+            r.profile,
+            str(len(r.findings)),
+            f"{c['critical']}/{c['high']}/{c['medium']}/{c['low']}/{c['info']}",
+            r.started_at.isoformat(timespec="seconds"),
+        )
+    console.print(table)
+
+
 @report_app.command("show")
 def report_show(
-    run_id: str,
+    run_id: str = typer.Argument(..., help="Run ID, or 'latest' for the most recent run."),
+    fmt: str = typer.Option("html", "--format", "-f", help="html|md|json"),
+    no_open: bool = typer.Option(False, "--no-open", help="Do not auto-open in browser (html)."),
     cache_dir: Path = typer.Option(None, "--cache-dir"),
 ) -> None:
+    """Render the visual HTML dashboard (default) and open it in the browser."""
     cache = cache_dir or _default_cache_dir()
-    p = _runs_dir(cache) / run_id / "report.md"
-    if not p.exists():
-        console.print(f"[red]Report not found:[/red] {p}")
+    runs = _runs_dir(cache)
+    if run_id == "latest":
+        candidates = [d for d in runs.iterdir() if (d / "report.json").exists()] if runs.exists() else []
+        if not candidates:
+            console.print(f"[red]No runs found in[/red] {runs}")
+            raise typer.Exit(2)
+        run_id = max(candidates, key=lambda d: d.stat().st_mtime).name
+        console.print(f"[dim]Resolved 'latest' → {run_id}[/dim]")
+
+    run_dir = runs / run_id
+    rj = run_dir / "report.json"
+    if not rj.exists():
+        console.print(f"[red]Report not found:[/red] {rj}")
         raise typer.Exit(2)
-    console.print(p.read_text())
+
+    if fmt == "json":
+        console.print_json(rj.read_text())
+        return
+    if fmt == "md":
+        md = run_dir / "report.md"
+        if not md.exists():
+            ReportEmitter(Report.model_validate_json(rj.read_text())).write_markdown(md)
+        console.print(md.read_text())
+        return
+    if fmt != "html":
+        console.print(f"[red]Unknown format:[/red] {fmt}")
+        raise typer.Exit(2)
+
+    # Always (re)render HTML so it reflects the latest renderer.
+    rep = Report.model_validate_json(rj.read_text())
+    html_path = run_dir / "report.html"
+    ReportEmitter(rep).write_html(html_path)
+    console.print(f"[green]Wrote:[/green] {html_path}")
+    if not no_open:
+        import webbrowser
+        webbrowser.open(html_path.as_uri())
+
+
+@report_app.command("open")
+def report_open(
+    run_id: str = typer.Argument("latest"),
+    cache_dir: Path = typer.Option(None, "--cache-dir"),
+) -> None:
+    """Open the HTML report for a run (alias for `show --format html`)."""
+    report_show(run_id=run_id, fmt="html", no_open=False, cache_dir=cache_dir)
 
 
 @report_app.command("diff")

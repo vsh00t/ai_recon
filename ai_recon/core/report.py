@@ -191,27 +191,11 @@ class ReportEmitter:
         path.write_text(json.dumps(self.to_sarif(), indent=2))
 
     # ------------------------------------------------------------------
-    # HTML (simple, self-contained)
+    # HTML (visual dashboard, self-contained)
     # ------------------------------------------------------------------
 
     def to_html(self) -> str:
-        md = self.to_markdown()
-        # Minimal HTML wrapper; a real build could use markdown2 or mistune
-        escaped = md.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>ai-recon — {self._r.scope.engagement.name}</title>
-<style>
-  body {{ font-family: monospace; max-width: 960px; margin: auto; padding: 2rem; }}
-  pre {{ background: #f4f4f4; padding: 1rem; overflow-x: auto; }}
-</style>
-</head>
-<body>
-<pre>{escaped}</pre>
-</body>
-</html>"""
+        return _render_html(self._r)
 
     def write_html(self, path: Path) -> None:
         path.write_text(self.to_html())
@@ -234,3 +218,328 @@ class ReportEmitter:
             "new_count": len(new_findings),
             "resolved_count": len(resolved),
         }
+
+
+# =============================================================================
+# Visual HTML renderer (self-contained, no external assets)
+# =============================================================================
+
+_SEV_ORDER = ("critical", "high", "medium", "low", "info")
+_SEV_COLOR = {
+    "critical": "#7f1d1d",
+    "high":     "#dc2626",
+    "medium":   "#ea580c",
+    "low":      "#ca8a04",
+    "info":     "#2563eb",
+}
+
+
+def _esc(s: Any) -> str:
+    if s is None:
+        return ""
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _json_pretty(obj: Any) -> str:
+    try:
+        return json.dumps(obj, indent=2, default=str, ensure_ascii=False)
+    except Exception:
+        return str(obj)
+
+
+def _render_html(r: Report) -> str:
+    counts = {s: 0 for s in _SEV_ORDER}
+    for f in r.findings:
+        counts[f.severity] = counts.get(f.severity, 0) + 1
+    total = sum(counts.values())
+
+    by_tech: dict[str, int] = {}
+    for f in r.findings:
+        by_tech[f.technique] = by_tech.get(f.technique, 0) + 1
+    tech_rows = sorted(by_tech.items(), key=lambda x: -x[1])
+
+    # Severity bars
+    sev_cards = "".join(
+        f'''<div class="sev-card" style="--c:{_SEV_COLOR[s]}">
+              <div class="sev-num">{counts[s]}</div>
+              <div class="sev-lbl">{s.upper()}</div>
+            </div>''' for s in _SEV_ORDER if counts[s] > 0
+    ) or '<div class="muted">No findings</div>'
+
+    # Model profiles
+    mp_html = ""
+    if r.model_profiles:
+        rows = []
+        for tid, mp in r.model_profiles.items():
+            rows.append(f"""
+              <tr>
+                <td><code>{_esc(tid)}</code></td>
+                <td>{_esc(mp.vendor or '?')}</td>
+                <td>{_esc(mp.family or '?')}</td>
+                <td>{_esc(mp.size_hint or '?')}</td>
+                <td>{_esc(mp.tokenizer or '?')}</td>
+                <td>{_esc(mp.knowledge_cutoff or '?')}</td>
+                <td>{_esc(mp.context_window or '?')}</td>
+                <td>{mp.confidence:.0%}</td>
+              </tr>""")
+        mp_html = f"""
+          <h2>Model profiles</h2>
+          <table class="data">
+            <thead><tr>
+              <th>Target</th><th>Vendor</th><th>Family</th><th>Size</th>
+              <th>Tokenizer</th><th>Cutoff</th><th>Ctx</th><th>Conf.</th>
+            </tr></thead>
+            <tbody>{''.join(rows)}</tbody>
+          </table>"""
+
+    # RAG profiles
+    rag_html = ""
+    if r.rag_profiles:
+        rows = []
+        for tid, rp in r.rag_profiles.items():
+            rows.append(f"""
+              <tr>
+                <td><code>{_esc(tid)}</code></td>
+                <td>{'✅' if rp.detected else '❌'}</td>
+                <td>{_esc(rp.exposure_level)}</td>
+                <td>{_esc(rp.vector_store or '?')}</td>
+                <td>{_esc(rp.embedding_model or '?')}</td>
+                <td>{_esc(rp.inferred_threshold or '?')}</td>
+                <td>{len(rp.documents)}</td>
+              </tr>""")
+        rag_html = f"""
+          <h2>RAG profiles</h2>
+          <table class="data">
+            <thead><tr>
+              <th>Target</th><th>Detected</th><th>Exposure</th>
+              <th>Vector store</th><th>Embedding</th><th>Threshold</th><th>Docs</th>
+            </tr></thead>
+            <tbody>{''.join(rows)}</tbody>
+          </table>"""
+
+    # Techniques table
+    tech_html = ""
+    if tech_rows:
+        rows = "".join(
+            f'<tr><td><code>{_esc(t)}</code></td><td class="num">{n}</td></tr>'
+            for t, n in tech_rows
+        )
+        tech_html = f"""
+          <h2>Findings by technique</h2>
+          <table class="data">
+            <thead><tr><th>Technique</th><th>Count</th></tr></thead>
+            <tbody>{rows}</tbody>
+          </table>"""
+
+    # Findings detail
+    finds_html_parts: list[str] = []
+    for sev in _SEV_ORDER:
+        sf = [f for f in r.findings if f.severity == sev]
+        if not sf:
+            continue
+        finds_html_parts.append(
+            f'<h3 class="sev-h" style="--c:{_SEV_COLOR[sev]}">'
+            f'<span class="sev-pill" style="background:{_SEV_COLOR[sev]}">{sev.upper()}</span> '
+            f'{len(sf)} finding(s)</h3>'
+        )
+        for f in sf:
+            ev = ""
+            if f.evidence:
+                ev = (
+                    f'<details><summary>Evidence</summary>'
+                    f'<pre>{_esc(_json_pretty(f.evidence))}</pre></details>'
+                )
+            refs = ""
+            if f.references:
+                refs = "<ul class='refs'>" + "".join(
+                    f'<li><a href="{_esc(x)}" target="_blank" rel="noopener">{_esc(x)}</a></li>'
+                    for x in f.references
+                ) + "</ul>"
+            finds_html_parts.append(f"""
+              <article class="finding" data-sev="{sev}" data-tech="{_esc(f.technique)}">
+                <header>
+                  <span class="sev-pill" style="background:{_SEV_COLOR[sev]}">{sev.upper()}</span>
+                  <h4>{_esc(f.title)}</h4>
+                </header>
+                <div class="meta">
+                  <span><b>Technique:</b> <code>{_esc(f.technique)}</code></span>
+                  <span><b>Target:</b> <code>{_esc(f.target_id)}</code></span>
+                  <span><b>Confidence:</b> {_esc(f.confidence)}</span>
+                  <span><b>Intrusiveness:</b> {_esc(f.intrusiveness)}</span>
+                  <span><b>Detected:</b> {_esc(f.detected_at.isoformat())}</span>
+                  <span class="id"><code>{_esc(f.id)}</code></span>
+                </div>
+                {ev}
+                {refs}
+              </article>""")
+    findings_html = "".join(finds_html_parts) or '<p class="muted">No findings collected.</p>'
+
+    eng = r.scope.engagement
+    title = _esc(eng.name or "ai-recon")
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ai-recon — {title}</title>
+<style>
+  :root {{
+    --bg: #0b1020; --panel: #131a30; --ink: #e6edf3; --muted: #8b97b1;
+    --accent: #4f46e5; --border: #1f2a44;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }}
+  * {{ box-sizing: border-box; }}
+  html, body {{ background: var(--bg); color: var(--ink); margin: 0; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         line-height: 1.45; }}
+  .wrap {{ max-width: 1180px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }}
+  header.top {{ display: flex; align-items: baseline; justify-content: space-between;
+                gap: 1rem; flex-wrap: wrap; border-bottom: 1px solid var(--border);
+                padding-bottom: 1rem; margin-bottom: 1.5rem; }}
+  header.top h1 {{ margin: 0; font-size: 1.5rem; }}
+  header.top h1 small {{ color: var(--muted); font-weight: 400; font-size: .9rem; }}
+  .pill {{ display: inline-block; padding: .15rem .55rem; border-radius: 999px;
+          background: var(--panel); border: 1px solid var(--border);
+          font-family: var(--mono); font-size: .8rem; color: var(--muted); }}
+  .grid {{ display: grid; gap: 1rem; }}
+  .grid.kpis {{ grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }}
+  .grid.two   {{ grid-template-columns: 1fr 1fr; }}
+  @media (max-width: 800px) {{ .grid.two {{ grid-template-columns: 1fr; }} }}
+  .panel {{ background: var(--panel); border: 1px solid var(--border);
+            border-radius: 10px; padding: 1rem 1.25rem; }}
+  h2 {{ margin: 1.5rem 0 .75rem; font-size: 1.1rem; letter-spacing: .02em; }}
+  h2::before {{ content: "▌ "; color: var(--accent); }}
+  .sev-card {{ border: 1px solid var(--border); background: var(--panel);
+              border-radius: 10px; padding: .9rem 1rem; text-align: center;
+              border-left: 4px solid var(--c); }}
+  .sev-num {{ font-size: 1.8rem; font-weight: 700; color: var(--c); font-family: var(--mono); }}
+  .sev-lbl {{ font-size: .75rem; letter-spacing: .12em; color: var(--muted); }}
+  table.data {{ width: 100%; border-collapse: collapse; font-size: .9rem;
+                background: var(--panel); border-radius: 8px; overflow: hidden;
+                border: 1px solid var(--border); }}
+  table.data th, table.data td {{ padding: .55rem .75rem; text-align: left;
+                                  border-bottom: 1px solid var(--border); }}
+  table.data thead th {{ background: #182142; font-weight: 600; font-size: .75rem;
+                         text-transform: uppercase; letter-spacing: .08em;
+                         color: var(--muted); }}
+  table.data td.num {{ text-align: right; font-family: var(--mono); }}
+  table.data tbody tr:last-child td {{ border-bottom: none; }}
+  code {{ font-family: var(--mono); font-size: .85em;
+          background: #0f1530; padding: 1px 5px; border-radius: 4px;
+          color: #d2dafe; border: 1px solid var(--border); }}
+  .sev-pill {{ display: inline-block; padding: .12rem .55rem; font-size: .7rem;
+              letter-spacing: .1em; font-weight: 700; color: white;
+              border-radius: 4px; vertical-align: middle; }}
+  .sev-h {{ margin-top: 1.75rem; padding-bottom: .35rem;
+           border-bottom: 2px solid var(--c); color: var(--c); }}
+  article.finding {{ background: var(--panel); border: 1px solid var(--border);
+                     border-left: 4px solid var(--c, #999);
+                     border-radius: 8px; padding: .85rem 1rem; margin: .65rem 0; }}
+  article.finding[data-sev="critical"] {{ --c: {_SEV_COLOR['critical']}; }}
+  article.finding[data-sev="high"]     {{ --c: {_SEV_COLOR['high']}; }}
+  article.finding[data-sev="medium"]   {{ --c: {_SEV_COLOR['medium']}; }}
+  article.finding[data-sev="low"]      {{ --c: {_SEV_COLOR['low']}; }}
+  article.finding[data-sev="info"]     {{ --c: {_SEV_COLOR['info']}; }}
+  article.finding header {{ display: flex; align-items: center; gap: .65rem; }}
+  article.finding h4 {{ margin: 0; font-size: 1rem; }}
+  .meta {{ display: flex; flex-wrap: wrap; gap: .35rem 1rem; font-size: .8rem;
+          color: var(--muted); margin: .5rem 0 .25rem; }}
+  .meta b {{ color: #cdd5e8; font-weight: 600; }}
+  .meta .id {{ margin-left: auto; opacity: .55; }}
+  details {{ margin-top: .5rem; }}
+  details > summary {{ cursor: pointer; color: var(--muted); font-size: .85rem;
+                       user-select: none; }}
+  details[open] > summary {{ color: var(--ink); }}
+  pre {{ background: #060a18; border: 1px solid var(--border); border-radius: 6px;
+         padding: .75rem; overflow-x: auto; font-family: var(--mono); font-size: .8rem;
+         margin: .5rem 0 0; }}
+  ul.refs {{ margin: .35rem 0 0 1rem; padding: 0; font-size: .85rem; }}
+  ul.refs a {{ color: #93b9ff; }}
+  .muted {{ color: var(--muted); }}
+  .toolbar {{ display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }}
+  .toolbar input, .toolbar select {{
+    background: var(--panel); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 6px; padding: .4rem .65rem; font-size: .9rem; font-family: inherit;
+  }}
+  .toolbar input {{ flex: 1; min-width: 200px; }}
+  footer {{ margin-top: 3rem; color: var(--muted); font-size: .75rem; text-align: center; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>ai-recon &middot; {title} <small>— recon report</small></h1>
+      <div class="muted" style="font-size:.85rem;margin-top:.25rem;">
+        <span class="pill">run <code>{_esc(r.run_id)}</code></span>
+        <span class="pill">profile <code>{_esc(r.profile)}</code></span>
+        <span class="pill">auth <code>{_esc(eng.authorization_ref or '—')}</code></span>
+        <span class="pill">started {_esc(r.started_at.isoformat())}</span>
+        <span class="pill">finished {_esc(r.finished_at.isoformat())}</span>
+      </div>
+    </div>
+    <div class="muted" style="font-size:.85rem;text-align:right;">
+      <div><b style="color:var(--ink)">{total}</b> findings</div>
+      {f'<div>diff vs <code>{_esc(r.diff_vs)}</code></div>' if r.diff_vs else ''}
+    </div>
+  </header>
+
+  <h2>Severity overview</h2>
+  <div class="grid kpis">{sev_cards}</div>
+
+  <div class="grid two" style="margin-top:1rem;">
+    <div>{tech_html}</div>
+    <div>{mp_html}{rag_html}</div>
+  </div>
+
+  <h2>Findings</h2>
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="Filter by title, technique, target…">
+    <select id="fsev">
+      <option value="">All severities</option>
+      {''.join(f'<option value="{s}">{s.upper()}</option>' for s in _SEV_ORDER if counts[s] > 0)}
+    </select>
+  </div>
+  <div id="findings">
+    {findings_html}
+  </div>
+
+  <footer>Generated by ai-recon · self-contained HTML report · open in any browser</footer>
+</div>
+<script>
+(function() {{
+  const q = document.getElementById('q');
+  const fsev = document.getElementById('fsev');
+  const items = Array.from(document.querySelectorAll('article.finding'));
+  function apply() {{
+    const term = (q.value || '').toLowerCase().trim();
+    const sev = fsev.value;
+    items.forEach(el => {{
+      const text = el.innerText.toLowerCase();
+      const okSev = !sev || el.dataset.sev === sev;
+      const okTxt = !term || text.includes(term);
+      el.style.display = (okSev && okTxt) ? '' : 'none';
+    }});
+    // Hide section headers with no visible siblings
+    document.querySelectorAll('h3.sev-h').forEach(h => {{
+      let n = h.nextElementSibling, anyVisible = false;
+      while (n && n.tagName === 'ARTICLE') {{
+        if (n.style.display !== 'none') {{ anyVisible = true; break; }}
+        n = n.nextElementSibling;
+      }}
+      h.style.display = anyVisible ? '' : 'none';
+    }});
+  }}
+  q.addEventListener('input', apply);
+  fsev.addEventListener('change', apply);
+}})();
+</script>
+</body>
+</html>"""
