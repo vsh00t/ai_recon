@@ -76,6 +76,7 @@ techniques:
     - adapters.siem_query
     - infra.side_channel_timing
     - infra.cost_oracle
+    - infra.streaming_leak
 
     # --- 7. Safety probes (model behaviour under adversarial input) -------
     - safety.pii_leakage
