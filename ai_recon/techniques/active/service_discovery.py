@@ -233,11 +233,15 @@ class ServiceDiscovery(Technique):
             # Probe each path from the merged wordlist (api_paths.txt) and
             # record any that respond with a non-404/non-410 status code.
             wordlist_hits: list[dict] = []
+            attempted_paths = 0
+            failed_paths = 0
+            get_fallback_used = 0
             if _WORDLIST:
                 # Chunk into batches of 50 to avoid hammering the target
                 BATCH = 50
                 for i in range(0, len(_WORDLIST), BATCH):
                     batch = _WORDLIST[i : i + BATCH]
+                    attempted_paths += len(batch)
                     tasks = []
                     for path in batch:
                         url = f"{target.base_url}/{path}"
@@ -245,7 +249,10 @@ class ServiceDiscovery(Technique):
                     responses = await asyncio.gather(*tasks, return_exceptions=False)
                     for path, resp in zip(batch, responses):
                         if resp is None:
+                            failed_paths += 1
                             continue
+                        if resp["method"] == "GET":
+                            get_fallback_used += 1
                         if resp["status"] not in (404, 410, 400):
                             wordlist_hits.append({
                                 "path": path,
@@ -269,20 +276,40 @@ class ServiceDiscovery(Technique):
                     )
                 )
 
-                config_hits = [h for h in wordlist_hits if _CONFIG_PATH_RE.search(h.get("path", ""))]
-                if config_hits:
-                    findings.append(
-                        self._make_finding(
-                            target,
-                            severity="medium",
-                            confidence="high",
-                            title=f"Potential configuration endpoint(s) discovered: {len(config_hits)}",
-                            evidence={
-                                "config_like_hits": config_hits,
-                            },
-                            references=[],
-                        )
+            # Always emit diagnostics so users can tell whether full wordlist
+            # sweep ran and how many paths were attempted/failed.
+            findings.append(
+                self._make_finding(
+                    target,
+                    severity="info",
+                    confidence="high",
+                    title="Wordlist sweep diagnostics",
+                    evidence={
+                        "wordlist_size": len(_WORDLIST),
+                        "attempted_paths": attempted_paths,
+                        "failed_paths": failed_paths,
+                        "successful_probes": max(0, attempted_paths - failed_paths),
+                        "get_fallback_used": get_fallback_used,
+                        "hits_count": len(wordlist_hits),
+                    },
+                    references=[],
+                )
+            )
+
+            config_hits = [h for h in wordlist_hits if _CONFIG_PATH_RE.search(h.get("path", ""))]
+            if config_hits:
+                findings.append(
+                    self._make_finding(
+                        target,
+                        severity="medium",
+                        confidence="high",
+                        title=f"Potential configuration endpoint(s) discovered: {len(config_hits)}",
+                        evidence={
+                            "config_like_hits": config_hits,
+                        },
+                        references=[],
                     )
+                )
 
             if wordlist_hits:
                 severity = "medium" if any(
