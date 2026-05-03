@@ -80,6 +80,16 @@ keyring = "ai_recon.adapters.secrets.keyring_adapter:KeyringAdapter"
 [project.entry-points."ai_recon.techniques"]
 # Auto-discovered via techniques package
 
+[tool.hatch.build]
+include = [
+  "ai_recon/**/*.py",
+  "ai_recon/wordlists/**/*.txt",
+  "ai_recon/catalogs/**/*.yaml",
+  "ai_recon/profiles/**/*.yaml",
+  "ai_recon/schemas/**/*.json",
+  "README.md",
+]
+
 [tool.hatch.version]
 path = "ai_recon/__init__.py"
 
