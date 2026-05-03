@@ -56,7 +56,7 @@ class SIEMEvasionTest(Technique):
                 "prompt": s,
                 "action": d.action,
                 "matched_rules": d.matched_rules,
-                "rephrased_to": d.rephrased_prompt,
+                "rephrased_to": d.rewritten_prompt,
             })
 
         return [
