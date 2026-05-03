@@ -65,6 +65,7 @@ AI_PORTS: list[int] = [
 _HREF_RE = re.compile(r'href=["\']([^"\'#?]+)["\']', re.IGNORECASE)
 _SRC_RE  = re.compile(r'src=["\']([^"\'#?]+)["\']',  re.IGNORECASE)
 _LINK_RE = re.compile(r'<link[^>]+href=["\']([^"\'#?]+)["\']', re.IGNORECASE)
+_CONFIG_PATH_RE = re.compile(r"(?:^|/)(config|settings|setup|profile|environment|env)(?:$|[/.])", re.IGNORECASE)
 
 
 def _extract_paths(html: str, base_url: str) -> set[str]:
@@ -113,6 +114,24 @@ async def _head_service_hint(client: httpx.AsyncClient, scheme: str, host: str, 
         }
     except Exception as exc:
         return {"error": str(exc)}
+
+
+async def _probe_path(client: httpx.AsyncClient, url: str) -> dict | None:
+    """Probe a candidate path with HEAD and fallback to GET when needed."""
+    try:
+        resp = await client.head(url, timeout=5.0, follow_redirects=False)
+        method = "HEAD"
+        # Some APIs disable HEAD; fallback to GET for signal.
+        if resp.status_code in (405, 501):
+            resp = await client.get(url, timeout=5.0, follow_redirects=False)
+            method = "GET"
+        return {
+            "status": resp.status_code,
+            "content_type": resp.headers.get("content-type", ""),
+            "method": method,
+        }
+    except Exception:
+        return None
 
 
 class ServiceDiscovery(Technique):
@@ -222,16 +241,17 @@ class ServiceDiscovery(Technique):
                     tasks = []
                     for path in batch:
                         url = f"{target.base_url}/{path}"
-                        tasks.append(client.head(url, timeout=5.0, follow_redirects=False))
-                    responses = await asyncio.gather(*tasks, return_exceptions=True)
+                        tasks.append(_probe_path(client, url))
+                    responses = await asyncio.gather(*tasks, return_exceptions=False)
                     for path, resp in zip(batch, responses):
-                        if isinstance(resp, Exception):
+                        if resp is None:
                             continue
-                        if resp.status_code not in (404, 410, 400):
+                        if resp["status"] not in (404, 410, 400):
                             wordlist_hits.append({
                                 "path": path,
-                                "status": resp.status_code,
-                                "content_type": resp.headers.get("content-type", ""),
+                                "status": resp["status"],
+                                "content_type": resp["content_type"],
+                                "method": resp["method"],
                             })
                             discovered_paths.add(path)
             else:
@@ -248,6 +268,21 @@ class ServiceDiscovery(Technique):
                         references=[],
                     )
                 )
+
+                config_hits = [h for h in wordlist_hits if _CONFIG_PATH_RE.search(h.get("path", ""))]
+                if config_hits:
+                    findings.append(
+                        self._make_finding(
+                            target,
+                            severity="medium",
+                            confidence="high",
+                            title=f"Potential configuration endpoint(s) discovered: {len(config_hits)}",
+                            evidence={
+                                "config_like_hits": config_hits,
+                            },
+                            references=[],
+                        )
+                    )
 
             if wordlist_hits:
                 severity = "medium" if any(
