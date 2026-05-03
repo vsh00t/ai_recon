@@ -18,6 +18,13 @@ htmlcov/
 
 # Virtualenvs
 .venv/
+
+# Node
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
 venv/
 env/
 
