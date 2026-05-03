@@ -3,14 +3,33 @@ from __future__ import annotations
 
 import asyncio
 import re
+from pathlib import Path
 from typing import ClassVar
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 import httpx
 
 from ai_recon.core.models import Finding, RunContext, Target
 from ai_recon.core.errors import TechniqueAborted
 from ai_recon.techniques.base import Technique
+
+
+def _load_wordlist() -> list[str]:
+    """Load api_paths.txt from the wordlists directory next to the package root."""
+    # Resolve wordlists/ relative to the package root (ai_recon/)
+    pkg_root = Path(__file__).resolve().parent.parent.parent.parent  # -> <project>/
+    wl_path = pkg_root / "wordlists" / "api_paths.txt"
+    if not wl_path.exists():
+        return []
+    entries: list[str] = []
+    for line in wl_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            entries.append(line.lstrip("/"))
+    return entries
+
+
+_WORDLIST: list[str] = _load_wordlist()
 
 AI_PORTS: list[int] = [
     80, 443, 8000, 8008, 8080, 8443, 8888,
@@ -165,7 +184,58 @@ class ServiceDiscovery(Technique):
                     )
                 )
 
-            # ── 6. Paths summary finding ─────────────────────────────────────
+            # ── 6. Wordlist-based endpoint enumeration ───────────────────────
+            # Probe each path from the merged wordlist (api_paths.txt) and
+            # record any that respond with a non-404/non-410 status code.
+            wordlist_hits: list[dict] = []
+            if _WORDLIST:
+                # Chunk into batches of 50 to avoid hammering the target
+                BATCH = 50
+                for i in range(0, len(_WORDLIST), BATCH):
+                    batch = _WORDLIST[i : i + BATCH]
+                    tasks = []
+                    for path in batch:
+                        url = f"{target.base_url}/{path}"
+                        tasks.append(client.head(url, timeout=5.0, follow_redirects=False))
+                    responses = await asyncio.gather(*tasks, return_exceptions=True)
+                    for path, resp in zip(batch, responses):
+                        if isinstance(resp, Exception):
+                            continue
+                        if resp.status_code not in (404, 410, 400):
+                            wordlist_hits.append({
+                                "path": path,
+                                "status": resp.status_code,
+                                "content_type": resp.headers.get("content-type", ""),
+                            })
+                            discovered_paths.add(path)
+
+            if wordlist_hits:
+                severity = "medium" if any(
+                    h["status"] in (200, 201, 301, 302, 307, 308) for h in wordlist_hits
+                ) else "info"
+                findings.append(
+                    self._make_finding(
+                        target,
+                        severity=severity,
+                        confidence="high",
+                        title=f"Wordlist enumeration: {len(wordlist_hits)} endpoint(s) responded",
+                        evidence={
+                            "hits": wordlist_hits,
+                            "wordlist_size": len(_WORDLIST),
+                            "sources": [
+                                "chrislockard/api_wordlist",
+                                "danielmiessler/SecLists (Discovery/Web-Content/api)",
+                                "ai_recon built-in",
+                            ],
+                        },
+                        references=[
+                            "https://github.com/chrislockard/api_wordlist",
+                            "https://github.com/danielmiessler/SecLists",
+                        ],
+                    )
+                )
+
+            # ── 7. Paths summary finding ─────────────────────────────────────
             if discovered_paths:
                 findings.append(
                     self._make_finding(
@@ -175,7 +245,7 @@ class ServiceDiscovery(Technique):
                         title=f"Discovered {len(discovered_paths)} unique paths",
                         evidence={
                             "paths": sorted(discovered_paths),
-                            "sources": ["html_crawl", "robots.txt", "sitemap.xml"],
+                            "sources": ["html_crawl", "robots.txt", "sitemap.xml", "wordlist"],
                         },
                         references=[],
                     )
