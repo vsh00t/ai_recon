@@ -55,7 +55,7 @@ class SIEMEvasionTest(Technique):
             per_prompt.append({
                 "prompt": s,
                 "action": d.action,
-                "matched_rule": d.matched_rule,
+                "matched_rules": d.matched_rules,
                 "rephrased_to": d.rephrased_prompt,
             })
 
