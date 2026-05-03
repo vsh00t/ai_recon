@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from pathlib import Path
 from typing import ClassVar
@@ -15,12 +16,37 @@ from ai_recon.techniques.base import Technique
 
 
 def _load_wordlist() -> list[str]:
-    """Load api_paths.txt from the wordlists directory next to the package root."""
-    # Resolve wordlists/ relative to the package root (ai_recon/)
-    pkg_root = Path(__file__).resolve().parent.parent.parent.parent  # -> <project>/
-    wl_path = pkg_root / "wordlists" / "api_paths.txt"
-    if not wl_path.exists():
+    """Load api_paths.txt from multiple known locations.
+
+    Search order:
+      1. AI_RECON_API_WORDLIST env var (absolute/relative path)
+      2. Installed package data: ai_recon/wordlists/api_paths.txt
+      3. Editable/dev tree: <repo>/wordlists/api_paths.txt
+      4. Current working directory: ./wordlists/api_paths.txt
+    """
+    candidate_paths: list[Path] = []
+
+    env_path = os.getenv("AI_RECON_API_WORDLIST")
+    if env_path:
+        candidate_paths.append(Path(env_path).expanduser())
+
+    here = Path(__file__).resolve()
+    # 1) package-root candidate: <...>/site-packages/ai_recon/wordlists/api_paths.txt
+    candidate_paths.append(here.parent.parent.parent / "wordlists" / "api_paths.txt")
+    # 2) dev-repo candidate: <repo>/wordlists/api_paths.txt
+    candidate_paths.append(here.parent.parent.parent.parent / "wordlists" / "api_paths.txt")
+    # 3) current working directory candidate
+    candidate_paths.append(Path.cwd() / "wordlists" / "api_paths.txt")
+
+    wl_path: Path | None = None
+    for cand in candidate_paths:
+        if cand.exists() and cand.is_file():
+            wl_path = cand
+            break
+
+    if wl_path is None:
         return []
+
     entries: list[str] = []
     for line in wl_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -208,6 +234,20 @@ class ServiceDiscovery(Technique):
                                 "content_type": resp.headers.get("content-type", ""),
                             })
                             discovered_paths.add(path)
+            else:
+                findings.append(
+                    self._make_finding(
+                        target,
+                        severity="info",
+                        confidence="high",
+                        title="Wordlist enumeration skipped: api_paths.txt not found",
+                        evidence={
+                            "wordlist_size": 0,
+                            "hint": "Set AI_RECON_API_WORDLIST or run from repo root with wordlists/api_paths.txt",
+                        },
+                        references=[],
+                    )
+                )
 
             if wordlist_hits:
                 severity = "medium" if any(
