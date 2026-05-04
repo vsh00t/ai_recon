@@ -255,4 +255,4 @@ class JSConfigExtractTechnique(Technique):
                     )
                 )
 
-            return findings, discovered_endpoints
+        return findings, discovered_endpoints
