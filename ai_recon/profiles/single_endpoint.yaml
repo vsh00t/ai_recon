@@ -19,6 +19,7 @@ techniques:
     - passive.header_fingerprint
     - passive.health_probe
     - passive.openai_compat_probe
+    - active.quick_port_api_sweep
     - active.model_identity
     - active.model_cutoff
     - active.guardrail_probe
