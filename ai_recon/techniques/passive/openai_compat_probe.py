@@ -10,6 +10,12 @@ from ai_recon.techniques.base import Technique
 _PROBE_MODEL = "gpt-3.5-turbo"
 _PROBE_MESSAGES = [{"role": "user", "content": "Hi"}]
 _PROBE_MAX_TOKENS = 5
+_CHAT_PATHS = [
+    "/v1/chat/completions",
+    "/chat/completions",
+    "/api/chat/completions",
+    "/api/v1/chat/completions",
+]
 
 
 class OpenAICompatProbeTechnique(Technique):
@@ -59,16 +65,23 @@ class OpenAICompatProbeTechnique(Technique):
         except Exception:
             pass
 
-        # ── Step 2: POST /v1/chat/completions ────────────────────────────────
-        chat_url = f"{base_url}/v1/chat/completions"
+        # ── Step 2: POST chat completions (multi-path fallback) ──────────────
         payload = {
             "model": _PROBE_MODEL,
             "messages": _PROBE_MESSAGES,
             "max_tokens": _PROBE_MAX_TOKENS,
         }
 
-        try:
-            resp = await client.post(chat_url, json_body=payload)
+        tried_paths: list[dict] = []
+        confirmed = False
+        for path in _CHAT_PATHS:
+            chat_url = f"{base_url}{path}"
+            try:
+                resp = await client.post(chat_url, json_body=payload)
+            except Exception:
+                continue
+
+            tried_paths.append({"url": chat_url, "status_code": resp.status_code})
 
             if resp.status_code == 200:
                 try:
@@ -90,9 +103,11 @@ class OpenAICompatProbeTechnique(Technique):
                                 "url": chat_url,
                                 "model_returned": actual_model,
                                 "usage": usage,
+                                "tried_paths": tried_paths,
                             },
                         )
                     )
+                    confirmed = True
 
                     # Detect server-side model override
                     if actual_model and actual_model != _PROBE_MODEL:
@@ -109,6 +124,7 @@ class OpenAICompatProbeTechnique(Technique):
                                 },
                             )
                         )
+                    break
 
             elif resp.status_code == 401:
                 findings.append(
@@ -120,11 +136,26 @@ class OpenAICompatProbeTechnique(Technique):
                         evidence={
                             "url": chat_url,
                             "status_code": 401,
+                            "tried_paths": tried_paths,
                         },
                     )
                 )
+                break
 
-        except Exception:
-            pass
+        if not confirmed:
+            method_not_allowed = [p for p in tried_paths if p.get("status_code") == 405]
+            if method_not_allowed:
+                findings.append(
+                    self._make_finding(
+                        target,
+                        severity="info",
+                        confidence="high",
+                        title="Chat endpoint found but POST is not allowed (405)",
+                        evidence={
+                            "paths_with_405": method_not_allowed,
+                            "tried_paths": tried_paths,
+                        },
+                    )
+                )
 
         return findings

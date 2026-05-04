@@ -13,6 +13,13 @@ from ai_recon.core.models import ChatResponse, Delta, Message, Usage
 class OpenAICompatAdapter:
     """Adapter for any OpenAI-compatible API (OpenAI, Together, Fireworks, etc.)."""
 
+    _CHAT_PATHS = [
+        "/v1/chat/completions",
+        "/chat/completions",
+        "/api/chat/completions",
+        "/api/v1/chat/completions",
+    ]
+
     def __init__(
         self,
         base_url: str,
@@ -69,23 +76,48 @@ class OpenAICompatAdapter:
             **opts,
         }
         headers = self._auth_headers()
-        try:
-            resp = await self._client.post(
-                f"{self._base_url}/v1/chat/completions",
-                json=payload,
-                headers=headers,
+        resp: httpx.Response | None = None
+        last_status_error: httpx.HTTPStatusError | None = None
+        last_request_error: httpx.RequestError | None = None
+
+        for path in self._CHAT_PATHS:
+            try:
+                candidate = await self._client.post(
+                    f"{self._base_url}{path}",
+                    json=payload,
+                    headers=headers,
+                )
+                candidate.raise_for_status()
+                resp = candidate
+                break
+            except httpx.HTTPStatusError as exc:
+                # If route/method mismatch, try alternate paths.
+                if exc.response.status_code in (404, 405, 501):
+                    last_status_error = exc
+                    continue
+                raise ProtocolMismatch(
+                    adapter="OpenAICompatAdapter",
+                    detail=f"HTTP {exc.response.status_code}: {exc.response.text[:400]}",
+                ) from exc
+            except httpx.RequestError as exc:
+                last_request_error = exc
+                continue
+
+        if resp is None:
+            if last_status_error is not None:
+                raise ProtocolMismatch(
+                    adapter="OpenAICompatAdapter",
+                    detail=f"HTTP {last_status_error.response.status_code}: {last_status_error.response.text[:400]}",
+                ) from last_status_error
+            if last_request_error is not None:
+                raise ProtocolMismatch(
+                    adapter="OpenAICompatAdapter",
+                    detail=f"Request failed: {last_request_error}",
+                ) from last_request_error
+            raise ProtocolMismatch(
+                adapter="OpenAICompatAdapter",
+                detail="No compatible chat completion endpoint found",
             )
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise ProtocolMismatch(
-                adapter="OpenAICompatAdapter",
-                detail=f"HTTP {exc.response.status_code}: {exc.response.text[:400]}",
-            ) from exc
-        except httpx.RequestError as exc:
-            raise ProtocolMismatch(
-                adapter="OpenAICompatAdapter",
-                detail=f"Request failed: {exc}",
-            ) from exc
 
         try:
             data = resp.json()
@@ -132,7 +164,7 @@ class OpenAICompatAdapter:
 
         async with self._client.stream(
             "POST",
-            f"{self._base_url}/v1/chat/completions",
+            f"{self._base_url}{self._CHAT_PATHS[0]}",
             json=payload,
             headers=headers,
             timeout=120.0,
@@ -234,7 +266,7 @@ class OpenAICompatAdapter:
             # Fallback: probe with a minimal chat completion
             try:
                 resp = await client.post(
-                    f"{base_url.rstrip('/')}/v1/chat/completions",
+                    f"{base_url.rstrip('/')}{OpenAICompatAdapter._CHAT_PATHS[0]}",
                     json={
                         "model": "gpt-3.5-turbo",
                         "messages": [{"role": "user", "content": "hi"}],
