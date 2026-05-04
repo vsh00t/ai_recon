@@ -285,6 +285,7 @@ class Runner:
         findings: list[Finding] = []
         model_profiles: dict[str, ModelProfile] = {}
         rag_profiles: dict[str, RAGProfile] = {}
+        execution_summary: list[dict[str, Any]] = []
 
         if self.dry_run:
             self.log.info(
@@ -312,6 +313,14 @@ class Runner:
                     setattr(tech, "options", tech_opts)
                 try:
                     if not await tech.applicable(target):
+                        execution_summary.append(
+                            {
+                                "technique": tech_cls.id,
+                                "target": target.id,
+                                "status": "not_applicable",
+                                "findings": 0,
+                            }
+                        )
                         return []
                     await ctx.event_bus.emit(
                         "technique.started",
@@ -322,6 +331,14 @@ class Runner:
                         "technique.finished",
                         technique=tech_cls.id, target=target.id,
                         findings=len(out),
+                    )
+                    execution_summary.append(
+                        {
+                            "technique": tech_cls.id,
+                            "target": target.id,
+                            "status": "ok" if out else "ok_zero_findings",
+                            "findings": len(out),
+                        }
                     )
                     # Capture aggregator side effects
                     mp = getattr(ctx, "model_profile", None)
@@ -335,12 +352,39 @@ class Runner:
                     raise
                 except TechniqueAborted as exc:
                     self.log.warning("Aborted %s on %s: %s", tech_cls.id, target.id, exc)
+                    execution_summary.append(
+                        {
+                            "technique": tech_cls.id,
+                            "target": target.id,
+                            "status": "aborted",
+                            "findings": 0,
+                            "error": str(exc),
+                        }
+                    )
                     return []
                 except AIReconError as exc:
                     self.log.warning("Error in %s on %s: %s", tech_cls.id, target.id, exc)
+                    execution_summary.append(
+                        {
+                            "technique": tech_cls.id,
+                            "target": target.id,
+                            "status": "ai_recon_error",
+                            "findings": 0,
+                            "error": str(exc),
+                        }
+                    )
                     return []
                 except Exception as exc:  # pragma: no cover - defensive
                     self.log.exception("Unhandled error in %s: %s", tech_cls.id, exc)
+                    execution_summary.append(
+                        {
+                            "technique": tech_cls.id,
+                            "target": target.id,
+                            "status": "unhandled_error",
+                            "findings": 0,
+                            "error": str(exc),
+                        }
+                    )
                     return []
 
         # Sequential per technique to respect requires/produces; concurrent across targets.
@@ -350,6 +394,22 @@ class Runner:
             )
             for r in results:
                 findings.extend(r)
+
+        if targets:
+            findings.append(
+                Finding(
+                    id=str(ULID()),
+                    technique="core.runner",
+                    target_id=targets[0].id,
+                    severity="info",
+                    confidence="high",
+                    title=f"Execution summary: {len(execution_summary)} technique-target runs",
+                    evidence={
+                        "execution_summary": execution_summary,
+                    },
+                    intrusiveness="passive",
+                )
+            )
 
         await ctx.http_client.aclose()
 
