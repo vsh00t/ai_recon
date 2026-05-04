@@ -34,6 +34,15 @@ _COMMON_API_PATHS: list[str] = [
 ]
 
 
+def _interesting_headers(headers: httpx.Headers) -> dict[str, str]:
+    keep: dict[str, str] = {}
+    for k, v in headers.items():
+        kl = k.lower()
+        if kl in ("server", "via", "content-type") or kl.startswith("x-kong-") or kl.startswith("ratelimit") or kl.startswith("x-ratelimit"):
+            keep[k] = v
+    return keep
+
+
 async def _port_open(host: str, port: int, timeout: float = 1.2) -> bool:
     try:
         reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=timeout)
@@ -58,6 +67,7 @@ async def _probe_endpoint(client: httpx.AsyncClient, url: str) -> dict | None:
             "status": resp.status_code,
             "method": method,
             "content_type": resp.headers.get("content-type", ""),
+            "headers": _interesting_headers(resp.headers),
         }
     except Exception:
         return None
@@ -111,8 +121,16 @@ class QuickPortApiSweep(Technique):
                                 "status": res["status"],
                                 "method": res["method"],
                                 "content_type": res["content_type"],
+                                "headers": res["headers"],
                             }
                         )
+
+        protected_hits = [h for h in endpoint_hits if h["status"] == 401]
+        gateway_hits = [
+            h for h in endpoint_hits
+            if h.get("headers", {}).get("Server", "").lower().startswith("kong/")
+            or any(k.lower().startswith("x-kong-") for k in h.get("headers", {}))
+        ]
 
         if endpoint_hits:
             findings.append(
@@ -128,6 +146,28 @@ class QuickPortApiSweep(Technique):
                     references=[],
                 )
             )
+            if protected_hits:
+                findings.append(
+                    self._make_finding(
+                        target,
+                        severity="medium",
+                        confidence="high",
+                        title=f"Protected API endpoint(s) discovered on open ports: {len(protected_hits)}",
+                        evidence={"protected_hits": protected_hits},
+                        references=[],
+                    )
+                )
+            if gateway_hits:
+                findings.append(
+                    self._make_finding(
+                        target,
+                        severity="info",
+                        confidence="high",
+                        title=f"Gateway/API-management headers observed on open ports: {len(gateway_hits)}",
+                        evidence={"gateway_hits": gateway_hits},
+                        references=[],
+                    )
+                )
         else:
             findings.append(
                 self._make_finding(

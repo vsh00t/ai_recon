@@ -23,7 +23,7 @@ _ENDPOINT_KEYS_RE = re.compile(
             ragEndpoint|chatEndpoint|completionEndpoint|embeddingEndpoint|
             inferenceEndpoint|baseUrl|base_url
         )
-        (?:["']?)\s*[:=]\s*["'](?P<value>https?://[^"']+)["']""",
+        (?:["']?)\s*[:=]\s*["'](?P<value>(?:https?://[^"']+|/[^"']+))?["']""",
     re.IGNORECASE | re.VERBOSE,
 )
 
@@ -81,6 +81,21 @@ def _extract_notable(config: dict) -> dict:
     }
 
 
+def _resolve_endpoint(base_url: str, value: str) -> str:
+    return urljoin(base_url.rstrip("/") + "/", value)
+
+
+def _extract_endpoints_from_config(config: dict, base_url: str) -> dict[str, str]:
+    endpoints: dict[str, str] = {}
+    for key, value in config.items():
+        if not isinstance(value, str):
+            continue
+        if any(pat in key.lower() for pat in _NOTABLE_PATTERNS):
+            if value.startswith("/") or value.startswith("http://") or value.startswith("https://"):
+                endpoints[key] = _resolve_endpoint(base_url, value)
+    return endpoints
+
+
 class JSConfigExtractTechnique(Technique):
     id: ClassVar[str] = "passive.js_config_extract"
     intrusiveness: ClassVar = "passive"
@@ -91,6 +106,8 @@ class JSConfigExtractTechnique(Technique):
         client = self.ctx.http_client
         base_url = target.base_url
         page_url = base_url + "/"
+        discovered_endpoints: set[str] = set()
+        script_urls: list[str] = []
 
         # ── Fetch root page ───────────────────────────────────────────────────
         try:
@@ -136,6 +153,7 @@ class JSConfigExtractTechnique(Technique):
             if not _is_same_origin(page_url, src):
                 continue
             js_url = urljoin(page_url, src)
+            script_urls.append(js_url)
             try:
                 js_resp = await client.get(js_url)
                 if js_resp.status_code == 200:
@@ -145,12 +163,32 @@ class JSConfigExtractTechnique(Technique):
 
         # ── Scan all JS content ───────────────────────────────────────────────
         for js_url, js_text in all_js_content:
-            findings.extend(self._scan_js(target, js_url, js_text))
+            scan_findings, scan_endpoints = self._scan_js(target, base_url, js_url, js_text)
+            findings.extend(scan_findings)
+            discovered_endpoints |= scan_endpoints
+
+        if script_urls:
+            findings.append(
+                self._make_finding(
+                    target,
+                    severity="info",
+                    confidence="high",
+                    title=f"Client-side scripts discovered: {len(script_urls)}",
+                    evidence={"scripts": script_urls},
+                )
+            )
+
+        if discovered_endpoints:
+            try:
+                self.ctx.discovered_js_endpoints = sorted(discovered_endpoints)  # type: ignore[attr-defined]
+            except Exception:
+                pass
 
         return findings
 
-    def _scan_js(self, target: Target, js_url: str, js_text: str) -> list[Finding]:
+    def _scan_js(self, target: Target, base_url: str, js_url: str, js_text: str) -> tuple[list[Finding], set[str]]:
         findings: list[Finding] = []
+        discovered_endpoints: set[str] = set()
 
         # ── Window global config patterns ─────────────────────────────────────
         for match in _WINDOW_CONFIG_RE.finditer(js_text):
@@ -158,6 +196,8 @@ class JSConfigExtractTechnique(Technique):
             config = _try_json_parse(raw_obj)
             if config:
                 notable = _extract_notable(config)
+                resolved_endpoints = _extract_endpoints_from_config(config, base_url)
+                discovered_endpoints |= set(resolved_endpoints.values())
                 findings.append(
                     self._make_finding(
                         target,
@@ -168,6 +208,7 @@ class JSConfigExtractTechnique(Technique):
                             "source": js_url,
                             "config_keys": list(config.keys()),
                             "notable": notable,
+                            "resolved_endpoints": resolved_endpoints,
                         },
                     )
                 )
@@ -177,7 +218,10 @@ class JSConfigExtractTechnique(Technique):
         for match in _ENDPOINT_KEYS_RE.finditer(js_text):
             key = match.group("key")
             value = match.group("value")
-            endpoint_matches[key] = value
+            if not value:
+                continue
+            endpoint_matches[key] = _resolve_endpoint(base_url, value)
+            discovered_endpoints.add(endpoint_matches[key])
 
         if endpoint_matches:
             findings.append(
@@ -211,4 +255,4 @@ class JSConfigExtractTechnique(Technique):
                     )
                 )
 
-        return findings
+            return findings, discovered_endpoints

@@ -19,7 +19,9 @@ techniques:
     - passive.header_fingerprint
     - passive.health_probe
     - passive.openai_compat_probe
+    - passive.js_config_extract
     - active.quick_port_api_sweep
+    - active.client_js_endpoint_probe
     - active.model_identity
     - active.model_cutoff
     - active.guardrail_probe
@@ -27,7 +29,6 @@ techniques:
   disable:
     - passive.tls_metadata
     - passive.dns_recon
-    - passive.js_config_extract
     - passive.repo_mining
     - passive.env_file_scan
     - passive.dependency_audit

@@ -44,6 +44,7 @@ techniques:
 
     # --- 2. Service discovery ----------------------------------------------
     - active.service_discovery
+    - active.client_js_endpoint_probe
     - active.status_triage
     - active.gateway_detect
     - infra.inference_server_probe
