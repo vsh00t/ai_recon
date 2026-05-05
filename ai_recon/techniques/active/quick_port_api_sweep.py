@@ -322,21 +322,6 @@ class QuickPortApiSweep(Technique):
                     references=[],
                 )
             )
-        elif open_ports:
-            findings.append(
-                self._make_finding(
-                    target,
-                    severity="info",
-                    confidence="high",
-                    title="401-vs-404 enumeration: no protected versioned endpoints found (all returned 404)",
-                    evidence={
-                        "technique": "Probed common versioned API paths. All returned 404 (do not exist) or no response.",
-                        "paths_probed": _V1_ENUM_PATHS,
-                        "ports_scanned": open_ports,
-                    },
-                    references=[],
-                )
-            )
 
         if gateway_hits:
             findings.append(
