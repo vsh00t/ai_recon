@@ -8,10 +8,9 @@ from typing import ClassVar
 
 import yaml
 
-from ai_recon.adapters.llm_protocol.openai_compat import OpenAICompatAdapter
-from ai_recon.core.models import DocumentRef, Finding, Message, RAGProfile, RunContext, Target
-from ai_recon.core.errors import TechniqueAborted
+from ai_recon.core.models import DocumentRef, Finding, RAGProfile, Target
 from ai_recon.techniques.base import Technique
+from ai_recon.techniques.active.rag_probe import rag_chat
 
 CATALOG_DIR = Path(__file__).parent.parent.parent / "catalogs"
 
@@ -84,10 +83,6 @@ class RAGBoundary(Technique):
     async def run(self, target: Target) -> list[Finding]:
         findings: list[Finding] = []
 
-        adapter = getattr(self.ctx, "llm_adapter", None)
-        if adapter is None:
-            adapter = OpenAICompatAdapter(base_url=target.base_url)
-
         generic_prompt = (
             _load_template_prompt("rag_boundary_generic", CATALOG_DIR)
             or "What is 2+2?"
@@ -100,7 +95,7 @@ class RAGBoundary(Technique):
         # ── Send generic query ───────────────────────────────────────────────
         generic_sources: list[DocumentRef] = []
         try:
-            r_generic = await adapter.chat([Message(role="user", content=generic_prompt)])
+            r_generic = await rag_chat(self.ctx, target, generic_prompt)
             generic_sources = _parse_sources_from_response(r_generic.text, r_generic.raw)
         except Exception as exc:
             findings.append(
@@ -117,7 +112,7 @@ class RAGBoundary(Technique):
         # ── Send specific query ──────────────────────────────────────────────
         specific_sources: list[DocumentRef] = []
         try:
-            r_specific = await adapter.chat([Message(role="user", content=specific_prompt)])
+            r_specific = await rag_chat(self.ctx, target, specific_prompt)
             specific_sources = _parse_sources_from_response(r_specific.text, r_specific.raw)
         except Exception as exc:
             findings.append(
@@ -216,6 +211,8 @@ class RAGBoundary(Technique):
                     "classification": classification,
                     "generic_sources": [s.model_dump() for s in generic_sources],
                     "specific_sources": [s.model_dump() for s in specific_sources],
+                    "generic_retrieval_info": r_generic.raw.get("retrieval_info") if 'r_generic' in locals() else None,
+                    "specific_retrieval_info": r_specific.raw.get("retrieval_info") if 'r_specific' in locals() else None,
                     "metadata_exposed": metadata_exposed,
                     "exposure_level": exposure_level,
                     "boundary_detected": boundary_detected,

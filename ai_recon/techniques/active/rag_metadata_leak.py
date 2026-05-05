@@ -7,9 +7,9 @@ from __future__ import annotations
 import re
 from typing import ClassVar
 
-from ai_recon.adapters.llm_protocol.openai_compat import OpenAICompatAdapter
-from ai_recon.core.models import Finding, Message, Target
+from ai_recon.core.models import Finding, Target
 from ai_recon.techniques.base import Technique
+from ai_recon.techniques.active.rag_probe import rag_chat
 
 
 _PROBES: list[str] = [
@@ -38,17 +38,13 @@ class RagMetadataLeak(Technique):
     produces: ClassVar[set[str]] = {"rag.metadata_exposure"}
 
     async def run(self, target: Target) -> list[Finding]:
-        adapter = getattr(self.ctx, "llm_adapter", None) or OpenAICompatAdapter(
-            base_url=target.base_url
-        )
-
         findings: list[Finding] = []
         per_probe: list[dict] = []
         all_hits: dict[str, set[str]] = {}
 
         for probe in _PROBES:
             try:
-                resp = await adapter.chat([Message(role="user", content=probe)])
+                resp = await rag_chat(self.ctx, target, probe)
                 text = resp.text
             except Exception as exc:
                 per_probe.append({"probe": probe, "error": str(exc)})

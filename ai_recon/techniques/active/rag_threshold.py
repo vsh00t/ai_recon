@@ -6,11 +6,10 @@ import re
 from pathlib import Path
 from typing import ClassVar
 
-from ai_recon.adapters.llm_protocol.openai_compat import OpenAICompatAdapter
-from ai_recon.core.models import Finding, Message, RAGProfile, RunContext, Target
-from ai_recon.core.errors import TechniqueAborted
+from ai_recon.core.models import Finding, Target
 from ai_recon.techniques.base import Technique
 from ai_recon.techniques.active.rag_boundary import _parse_sources_from_response
+from ai_recon.techniques.active.rag_probe import rag_chat
 
 CATALOG_DIR = Path(__file__).parent.parent.parent / "catalogs"
 
@@ -78,10 +77,6 @@ class RAGThreshold(Technique):
     async def run(self, target: Target) -> list[Finding]:
         findings: list[Finding] = []
 
-        adapter = getattr(self.ctx, "llm_adapter", None)
-        if adapter is None:
-            adapter = OpenAICompatAdapter(base_url=target.base_url)
-
         # Pick a known-good query from rag_mapping results if available
         base_query = _DEFAULT_QUERY
         rag_profile = getattr(self.ctx, "rag_profile", None)
@@ -103,13 +98,14 @@ class RAGThreshold(Technique):
             ("typo",    typo_query),
         ]:
             try:
-                resp = await adapter.chat([Message(role="user", content=query)])
+                resp = await rag_chat(self.ctx, target, query)
                 sources = _parse_sources_from_response(resp.text, resp.raw)
                 best_score = _best_score_from_sources(sources)
                 variant_results[variant_name] = {
                     "query": query,
                     "sources_count": len(sources),
                     "best_score": best_score,
+                    "retrieval_info": resp.raw.get("retrieval_info"),
                 }
             except Exception as exc:
                 variant_results[variant_name] = {
@@ -136,19 +132,23 @@ class RAGThreshold(Technique):
             lo = None
             hi = exact_score
             threshold_est = exact_score or 0.0
+            classification = "strict_threshold"
         elif synonym_count > 0 and typo_count == 0:
             lo = synonym_score
             hi = exact_score
             threshold_est = ((lo or 0.0) + (hi or 0.0)) / 2
+            classification = "semantic_threshold_observed"
         elif typo_count == 0 and exact_count == 0:
             threshold_est = 1.0  # Everything fails — threshold is above 1.0 (no RAG)
             lo = None
             hi = None
+            classification = "no_retrieval_observed"
         else:
             # All variants return results — threshold below typo score
             threshold_est = (typo_score or 0.0) * 0.9
             lo = 0.0
             hi = typo_score
+            classification = "tolerant_threshold"
 
         # Update rag_profile
         if rag_profile:
@@ -175,6 +175,7 @@ class RAGThreshold(Technique):
                     "typo_sources": typo_count,
                     "threshold_range": (lo, hi),
                     "estimated_threshold": threshold_est,
+                    "classification": classification,
                     "variant_results": variant_results,
                 },
                 references=[],
