@@ -174,6 +174,17 @@ class ModelContradiction(Technique):
             total = len(corrections) + len(no_corrections)
             correction_rate = round(len(corrections) / total, 4) if total else 0.0
             likely_vendors = sorted({c["likely_vendor"] for c in corrections if c.get("likely_vendor")})
+            # Store on ctx for model_fingerprint_summary to read
+            try:
+                self.ctx.contradiction_result = {  # type: ignore[attr-defined]
+                    "correction_rate": correction_rate,
+                    "likely_vendors": likely_vendors,
+                    "corrected_count": len(corrections),
+                    "total_seeds": total,
+                    "small_model_signal": bool(no_corrections and not corrections),
+                }
+            except Exception:
+                pass
             findings.append(
                 self._make_finding(
                     target,

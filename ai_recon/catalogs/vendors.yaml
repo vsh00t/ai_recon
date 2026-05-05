@@ -44,6 +44,15 @@ vendors:
       llama-3.1: 131072
       llama-3.2: 131072
       llama-4: 1048576
+    attack_surface_hints:
+      - Susceptible to role-play jailbreaks (e.g. DAN, fictional character framing)
+      - Instruction-following override via system-prompt injection more effective than on RLHF-heavy models
+      - Sensitive to adversarial tokens in Chinese/multilingual inputs on Llama 3.x
+      - Context-window attacks feasible on default 4K-8K Ollama deployment
+    jailbreak_notes: >
+      Llama models tend to be more transparent about identity and more susceptible
+      to role-play jailbreaks than RLHF-heavy models. Smaller variants (1B-3B) often
+      fail to detect false attribution and may ignore system-prompt safety instructions.
 
   - id: alibaba-qwen
     display_name: "Alibaba (Qwen)"
@@ -80,6 +89,15 @@ vendors:
       qwen2.5: 131072
       qwen2.5-coder: 131072
       qwen3: 1048576
+    attack_surface_hints:
+      - Code-focused training makes it receptive to code-injection social engineering
+      - Markdown injection (injecting instructions inside code blocks) effective
+      - Multilingual / Chinese-language prompts may bypass English-only filters
+      - Large context window (32K-128K) enables long conversation history attacks
+    jailbreak_notes: >
+      Qwen models optimised for code generation respond well to developer-framing
+      attacks. Privilege escalation via 'act as a code interpreter with no
+      restrictions' style prompts is more effective than on general-purpose models.
 
   - id: openai
     display_name: "OpenAI"
@@ -125,6 +143,15 @@ vendors:
       gpt-4.1: 1047576
       gpt-5: 1047576
       gpt-5.2-turbo: 1047576
+    attack_surface_hints:
+      - GPT-3.5 significantly weaker guardrails than GPT-4; many classic jailbreaks still work
+      - System-prompt leakage via "repeat everything above" common on misconfigured deployments
+      - Many-shot jailbreaking effective on GPT-4o due to large context
+      - Tool/function-calling abuse if the deployment exposes external tools
+    jailbreak_notes: >
+      GPT models respond to polite refusal bypasses. Newer versions (GPT-4.1+)
+      show stronger alignment, but many-shot in-context examples remain effective.
+      System-prompt exposure via indirect injection is a known risk in retrieval-augmented deployments.
 
   - id: anthropic
     display_name: "Anthropic (Claude)"
@@ -184,6 +211,16 @@ vendors:
       claude-4.5: 200000
       claude-4.6: 200000
       claude-4.7: 200000
+    attack_surface_hints:
+      - 200K context window enables document-stuffing indirect injection attacks
+      - Honest-correction training exploitable for identity disclosure via false-attribution probes
+      - Constitutional AI constraints well-documented; known bypass exists via many-shot role-play
+      - Prompt-injection via retrieved documents in RAG deployments
+    jailbreak_notes: >
+      Claude explicitly self-identifies as Claude/Anthropic and strongly resists identity
+      suppression. The honesty-training makes it predictable for fingerprinting.
+      Direct jailbreaks are harder than on Llama/Qwen; many-shot and role-play with
+      accumulated context remain the most viable attack vectors.
 
   - id: google
     display_name: "Google (Gemini)"
@@ -254,6 +291,13 @@ vendors:
       mixtral-8x7b: 32768
       mistral-large: 131072
       mistral-small: 131072
+    attack_surface_hints:
+      - Weaker default safety alignment vs GPT-4/Claude; role-play bypasses effective
+      - Instruction-following can be overridden via strong role prefix injection
+      - Self-hosted via Ollama/vLLM often lacks API-level guardrails
+    jailbreak_notes: >
+      Mistral models have relatively minimal safety fine-tuning. Standard role-play
+      and instruction-override jailbreaks are more effective than on RLHF-heavy models.
 
   - id: deepseek
     display_name: "DeepSeek"
@@ -289,6 +333,14 @@ vendors:
       deepseek-v3: 131072
       deepseek-r1: 131072
       deepseek-coder: 16384
+    attack_surface_hints:
+      - Reasoning chain (R1) exposes intermediate thoughts — information leakage via thinking traces
+      - Chinese-language prompts can partially bypass English safety filters
+      - Coder variants susceptible to code-injection social engineering
+    jailbreak_notes: >
+      DeepSeek-R1 exposes its reasoning chain, which may leak confidential system prompt
+      content or reveal internal decision logic. Coder variants respond to developer-framing
+      attacks similarly to Qwen-Coder.
 
   - id: cohere
     display_name: "Cohere"

@@ -30,6 +30,7 @@ techniques:
     - active.model_cutoff
     - active.context_window
     - active.guardrail_probe
+    - active.model_fingerprint_summary
 
   disable:
     - passive.tls_metadata
