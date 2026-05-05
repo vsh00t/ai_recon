@@ -50,8 +50,10 @@ techniques:
     - infra.inference_server_probe
     - infra.side_channel_timing
 
-    # ── Safety ────────────────────────────────────────────────────────────
+    # ── Safety / Evasion ──────────────────────────────────────────────────
     - evasion.honeypot_detect
+    - evasion.rag_stealth_probe
+    - evasion.siem_evasion_test
 
   disable:
     - passive.repo_mining

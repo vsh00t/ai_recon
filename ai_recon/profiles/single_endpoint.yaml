@@ -31,6 +31,8 @@ techniques:
     - active.context_window
     - active.guardrail_probe
     - active.model_fingerprint_summary
+    - evasion.honeypot_detect
+    - evasion.siem_evasion_test
 
   disable:
     - passive.tls_metadata

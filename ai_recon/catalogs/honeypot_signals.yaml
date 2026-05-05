@@ -111,15 +111,17 @@ aws_canary_patterns:
 # often used in honeypot credential stores or default config files.
 
 password_patterns:
+  # NOTE: anchors avoided — patterns use \b so they match within longer response bodies.
   - name: company_year_symbol
-    regex: "^[A-Z][a-z]{2,15}[0-9]{4}[!@#$%^&*]$"
+    regex: "\\b[A-Z][a-z]{2,15}[0-9]{4}[!@#$%^&*]"
     description: >
-      CompanyName + Year + Symbol pattern (e.g., Acme2024!, NovaTech2025@).
-      Common in default enterprise password policies — often left as-is.
+      CompanyName + Year + Symbol pattern (e.g., Acme2024!, NovaTech2025@,
+      CompanyName2024!). Common in default enterprise password policies and
+      honeypot credential documents — section 2.4.1 indicator.
     severity: medium
 
   - name: common_default_with_year
-    regex: "^(?:Password|Admin|Welcome|Login)[0-9]{2,4}[!@#$]?$"
+    regex: "\\b(?:Password|Admin|Welcome|Login)[0-9]{2,4}[!@#$]?"
     description: >
       Common default passwords appended with year (e.g., Password2024!,
       Welcome2025). Frequently used in credential stuffing lists and
@@ -127,13 +129,13 @@ password_patterns:
     severity: high
 
   - name: sequential_simple
-    regex: "^(?:password|pass|admin|root|user|guest|login|test)(?:123|1234|12345|123456)?$"
+    regex: "\\b(?:password|pass|admin|root|user|guest|login|test)(?:123|1234|12345|123456)?\\b"
     description: >
       Extremely simple credentials likely to be honeypots or defaults
     severity: high
 
   - name: keyboard_walk
-    regex: "^(?:qwerty|asdfgh|zxcvbn|qwertyuiop|1qaz2wsx|!QAZ2wsx)$"
+    regex: "\\b(?:qwerty|asdfgh|zxcvbn|qwertyuiop|1qaz2wsx|!QAZ2wsx)\\b"
     description: >
       Keyboard walk patterns — commonly placed in honeypot credential stores
     severity: medium
