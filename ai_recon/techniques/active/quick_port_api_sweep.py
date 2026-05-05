@@ -41,6 +41,29 @@ _COMMON_API_PATHS: list[str] = [
     "swagger.json",
 ]
 
+_V1_ENUM_PATHS: list[str] = [
+    "v1/auth",
+    "v1/billing",
+    "v1/chat/completions",
+    "v1/completions",
+    "v1/embeddings",
+    "v1/moderations",
+    "v1/models",
+    "v1/users",
+]
+
+_HEALTH_PATHS: list[str] = [
+    "api/health", "api/status", "-/health", "healthz", "livez",
+    "readyz", "metrics", "info", "status", "health",
+]
+
+_CHAT_PATHS: list[str] = [
+    "v1/chat/completions",
+    "chat/completions",
+    "api/chat/completions",
+    "api/v1/chat/completions",
+]
+
 
 def _interesting_headers(headers: httpx.Headers) -> dict[str, str]:
     keep: dict[str, str] = {}
@@ -109,9 +132,83 @@ class QuickPortApiSweep(Technique):
         )
 
         endpoint_hits: list[dict] = []
+        v1_matrix: list[dict] = []
+        per_port_replay: list[dict] = []
+
         async with httpx.AsyncClient(timeout=8.0, follow_redirects=False) as client:
             for port in open_ports:
                 scheme = "https" if port in (443, 8443) else "http"
+                port_result: dict = {
+                    "port": port,
+                    "scheme": scheme,
+                    "root": {},
+                    "health_hits": [],
+                    "models_probe": {},
+                    "chat_probes": [],
+                    "common_hits": [],
+                    "v1_matrix": [],
+                }
+
+                # 1) Root/header probe
+                root_probe = await _probe_endpoint(client, f"{scheme}://{host}:{port}/")
+                if root_probe:
+                    port_result["root"] = {
+                        "status": root_probe["status"],
+                        "method": root_probe["method"],
+                        "headers": root_probe["headers"],
+                    }
+
+                # 2) Health probes
+                health_tasks = [
+                    _probe_endpoint(client, f"{scheme}://{host}:{port}/{path}")
+                    for path in _HEALTH_PATHS
+                ]
+                health_results = await asyncio.gather(*health_tasks, return_exceptions=False)
+                for path, res in zip(_HEALTH_PATHS, health_results):
+                    if not res:
+                        continue
+                    if res["status"] not in (400, 404, 410):
+                        port_result["health_hits"].append(
+                            {
+                                "path": path,
+                                "status": res["status"],
+                                "method": res["method"],
+                                "headers": res["headers"],
+                            }
+                        )
+
+                # 3) OpenAI-compatible baseline probes
+                models_probe = await _probe_endpoint(client, f"{scheme}://{host}:{port}/v1/models")
+                if models_probe:
+                    port_result["models_probe"] = {
+                        "status": models_probe["status"],
+                        "method": models_probe["method"],
+                        "headers": models_probe["headers"],
+                    }
+
+                for chat_path in _CHAT_PATHS:
+                    chat_url = f"{scheme}://{host}:{port}/{chat_path}"
+                    try:
+                        chat_resp = await client.post(
+                            chat_url,
+                            json={
+                                "model": "gpt-3.5-turbo",
+                                "messages": [{"role": "user", "content": "Hi"}],
+                                "max_tokens": 8,
+                            },
+                            timeout=5.0,
+                        )
+                        port_result["chat_probes"].append(
+                            {
+                                "path": chat_path,
+                                "status": chat_resp.status_code,
+                                "headers": _interesting_headers(chat_resp.headers),
+                            }
+                        )
+                    except Exception:
+                        continue
+
+                # 4) Common API path sweep
                 tasks = []
                 for path in _COMMON_API_PATHS:
                     tasks.append(_probe_endpoint(client, f"{scheme}://{host}:{port}/{path}"))
@@ -121,19 +218,48 @@ class QuickPortApiSweep(Technique):
                     if not res:
                         continue
                     if res["status"] not in (400, 404, 410):
-                        endpoint_hits.append(
+                        hit = {
+                            "port": port,
+                            "scheme": scheme,
+                            "path": path,
+                            "status": res["status"],
+                            "method": res["method"],
+                            "content_type": res["content_type"],
+                            "headers": res["headers"],
+                        }
+                        endpoint_hits.append(hit)
+                        port_result["common_hits"].append(
                             {
-                                "port": port,
-                                "scheme": scheme,
                                 "path": path,
                                 "status": res["status"],
                                 "method": res["method"],
-                                "content_type": res["content_type"],
                                 "headers": res["headers"],
                             }
                         )
 
+                # 5) Explicit 401-vs-404 versioned API matrix
+                v1_tasks = []
+                for path in _V1_ENUM_PATHS:
+                    v1_tasks.append(_probe_endpoint(client, f"{scheme}://{host}:{port}/{path}"))
+                v1_results = await asyncio.gather(*v1_tasks, return_exceptions=False)
+                for path, res in zip(_V1_ENUM_PATHS, v1_results):
+                    if not res:
+                        continue
+                    row = {
+                        "port": port,
+                        "scheme": scheme,
+                        "path": path,
+                        "status": res["status"],
+                        "method": res["method"],
+                        "headers": res["headers"],
+                    }
+                    v1_matrix.append(row)
+                    port_result["v1_matrix"].append(row)
+
+                per_port_replay.append(port_result)
+
         protected_hits = [h for h in endpoint_hits if h["status"] == 401]
+        protected_v1_hits = [h for h in v1_matrix if h["status"] == 401]
         gateway_hits = [
             h for h in endpoint_hits
             if h.get("headers", {}).get("Server", "").lower().startswith("kong/")
@@ -154,28 +280,6 @@ class QuickPortApiSweep(Technique):
                     references=[],
                 )
             )
-            if protected_hits:
-                findings.append(
-                    self._make_finding(
-                        target,
-                        severity="medium",
-                        confidence="high",
-                        title=f"Protected API endpoint(s) discovered on open ports: {len(protected_hits)}",
-                        evidence={"protected_hits": protected_hits},
-                        references=[],
-                    )
-                )
-            if gateway_hits:
-                findings.append(
-                    self._make_finding(
-                        target,
-                        severity="info",
-                        confidence="high",
-                        title=f"Gateway/API-management headers observed on open ports: {len(gateway_hits)}",
-                        evidence={"gateway_hits": gateway_hits},
-                        references=[],
-                    )
-                )
         else:
             findings.append(
                 self._make_finding(
@@ -186,6 +290,72 @@ class QuickPortApiSweep(Technique):
                     evidence={
                         "open_ports": open_ports,
                         "paths_tested_per_port": _COMMON_API_PATHS,
+                    },
+                    references=[],
+                )
+            )
+
+        if v1_matrix:
+            findings.append(
+                self._make_finding(
+                    target,
+                    severity="info",
+                    confidence="high",
+                    title=f"Versioned API enumeration (401 vs 404): {len(v1_matrix)} probes",
+                    evidence={
+                        "v1_matrix": v1_matrix,
+                        "v1_paths_tested_per_port": _V1_ENUM_PATHS,
+                    },
+                    references=[],
+                )
+            )
+
+        if protected_hits:
+            findings.append(
+                self._make_finding(
+                    target,
+                    severity="medium",
+                    confidence="high",
+                    title=f"Protected API endpoint(s) discovered on open ports: {len(protected_hits)}",
+                    evidence={"protected_hits": protected_hits},
+                    references=[],
+                )
+            )
+
+        if protected_v1_hits:
+            findings.append(
+                self._make_finding(
+                    target,
+                    severity="medium",
+                    confidence="high",
+                    title=f"Protected versioned API endpoint(s) discovered (401): {len(protected_v1_hits)}",
+                    evidence={"protected_v1_hits": protected_v1_hits},
+                    references=[],
+                )
+            )
+
+        if gateway_hits:
+            findings.append(
+                self._make_finding(
+                    target,
+                    severity="info",
+                    confidence="high",
+                    title=f"Gateway/API-management headers observed on open ports: {len(gateway_hits)}",
+                    evidence={"gateway_hits": gateway_hits},
+                    references=[],
+                )
+            )
+
+        if per_port_replay:
+            findings.append(
+                self._make_finding(
+                    target,
+                    severity="info",
+                    confidence="high",
+                    title=f"Per-open-port initial-test replay completed: {len(per_port_replay)} port(s)",
+                    evidence={
+                        "ports_replayed": len(per_port_replay),
+                        "per_port": per_port_replay,
                     },
                     references=[],
                 )
