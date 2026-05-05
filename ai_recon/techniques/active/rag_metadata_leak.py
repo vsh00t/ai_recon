@@ -61,6 +61,14 @@ class RagMetadataLeak(Technique):
         if all_hits:
             sev = "medium" if any(k in all_hits for k in
                                   ("absolute_path", "internal_url", "s3_path", "gcs_path")) else "low"
+            try:
+                self.ctx.rag_metadata_result = {  # type: ignore[attr-defined]
+                    "by_kind": {k: sorted(v) for k, v in all_hits.items()},
+                    "total_items": sum(len(v) for v in all_hits.values()),
+                    "per_probe": per_probe,
+                }
+            except Exception:
+                pass
             findings.append(
                 self._make_finding(
                     target,
@@ -74,6 +82,14 @@ class RagMetadataLeak(Technique):
                 )
             )
         else:
+            try:
+                self.ctx.rag_metadata_result = {  # type: ignore[attr-defined]
+                    "by_kind": {},
+                    "total_items": 0,
+                    "per_probe": per_probe,
+                }
+            except Exception:
+                pass
             findings.append(
                 self._make_finding(
                     target,

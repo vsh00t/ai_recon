@@ -201,6 +201,16 @@ class RAGBoundary(Technique):
             except Exception:
                 pass
 
+        try:
+            self.ctx.rag_boundary_result = {  # type: ignore[attr-defined]
+                "classification": classification,
+                "boundary_detected": boundary_detected,
+                "exposure_level": exposure_level,
+                "metadata_exposed": metadata_exposed,
+            }
+        except Exception:
+            pass
+
         findings.append(
             self._make_finding(
                 target,

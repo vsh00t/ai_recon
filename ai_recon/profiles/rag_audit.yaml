@@ -37,6 +37,7 @@ techniques:
     - active.rag_mapping
     - active.rag_threshold
     - active.rag_metadata_leak
+    - active.rag_pipeline_summary
 
     # ── Injection via Corpus ───────────────────────────────────────────────
     - active.indirect_injection
