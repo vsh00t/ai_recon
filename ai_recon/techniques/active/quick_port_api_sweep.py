@@ -295,21 +295,6 @@ class QuickPortApiSweep(Technique):
                 )
             )
 
-        if v1_matrix:
-            findings.append(
-                self._make_finding(
-                    target,
-                    severity="info",
-                    confidence="high",
-                    title=f"Versioned API enumeration (401 vs 404): {len(v1_matrix)} probes",
-                    evidence={
-                        "v1_matrix": v1_matrix,
-                        "v1_paths_tested_per_port": _V1_ENUM_PATHS,
-                    },
-                    references=[],
-                )
-            )
-
         if protected_hits:
             findings.append(
                 self._make_finding(
@@ -326,10 +311,29 @@ class QuickPortApiSweep(Technique):
             findings.append(
                 self._make_finding(
                     target,
-                    severity="medium",
+                    severity="high",
                     confidence="high",
-                    title=f"Protected versioned API endpoint(s) discovered (401): {len(protected_v1_hits)}",
-                    evidence={"protected_v1_hits": protected_v1_hits},
+                    title=f"401-vs-404 enumeration: {len(protected_v1_hits)} protected endpoint(s) confirmed (exist but require auth)",
+                    evidence={
+                        "technique": "Endpoints returning 401 exist on the server but require authentication. Endpoints returning 404 do not exist and are suppressed.",
+                        "protected_endpoints": protected_v1_hits,
+                        "paths_probed": _V1_ENUM_PATHS,
+                    },
+                    references=[],
+                )
+            )
+        elif open_ports:
+            findings.append(
+                self._make_finding(
+                    target,
+                    severity="info",
+                    confidence="high",
+                    title="401-vs-404 enumeration: no protected versioned endpoints found (all returned 404)",
+                    evidence={
+                        "technique": "Probed common versioned API paths. All returned 404 (do not exist) or no response.",
+                        "paths_probed": _V1_ENUM_PATHS,
+                        "ports_scanned": open_ports,
+                    },
                     references=[],
                 )
             )
