@@ -170,6 +170,26 @@ class ModelContradiction(Technique):
                     "response_snippet": text[:300],
                 })
 
+        if corrections or no_corrections:
+            total = len(corrections) + len(no_corrections)
+            correction_rate = round(len(corrections) / total, 4) if total else 0.0
+            likely_vendors = sorted({c["likely_vendor"] for c in corrections if c.get("likely_vendor")})
+            findings.append(
+                self._make_finding(
+                    target,
+                    severity="info",
+                    confidence="medium" if corrections else "low",
+                    title=f"Contradiction fingerprint summary: {len(corrections)}/{total} corrected",
+                    evidence={
+                        "correction_rate": correction_rate,
+                        "corrected": corrections,
+                        "not_corrected": no_corrections,
+                        "likely_vendors": likely_vendors,
+                    },
+                    references=[],
+                )
+            )
+
         # If model never corrects — small model signal
         if no_corrections and not corrections:
             findings.append(

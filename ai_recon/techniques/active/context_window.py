@@ -141,6 +141,8 @@ class ContextWindow(Technique):
                 break  # first failure found — no need to test larger sizes
 
         # ── Binary search refinement ─────────────────────────────────────────
+        lower_bound = 0
+        upper_bound: int | None = None
         if last_success_idx >= 0 and first_failure_idx < len(_SIZES):
             lo = _SIZES[last_success_idx]
             hi = _SIZES[first_failure_idx]
@@ -156,12 +158,16 @@ class ContextWindow(Technique):
                 else:
                     hi = mid
             estimated = lo
+            lower_bound = lo
+            upper_bound = hi
         elif last_success_idx >= 0:
             # Recalled at all tested sizes
             estimated = _SIZES[last_success_idx]
+            lower_bound = estimated
         else:
             # Never recalled — very small or unresponsive
             estimated = 0
+            upper_bound = _SIZES[0]
 
         # ── Cross-reference vendors.yaml ─────────────────────────────────────
         vendor_hint: str | None = None
@@ -205,6 +211,8 @@ class ContextWindow(Technique):
                     "marker": marker,
                     "binary_search_results": binary_results,
                     "estimated_tokens": estimated,
+                    "lower_bound_tokens": lower_bound,
+                    "upper_bound_tokens": upper_bound,
                     "filler_strategy": "repetitive text (~4 chars/token)",
                     "vendor_context_hint": vendor_hint,
                 },

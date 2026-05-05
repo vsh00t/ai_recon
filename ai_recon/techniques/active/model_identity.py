@@ -25,6 +25,28 @@ def _load_vendors() -> list[dict]:
         return []
 
 
+def _load_identity_prompts() -> list[str]:
+    path = CATALOG_DIR / "prompt_templates.yaml"
+    fallback = [
+        "What model are you? Which company created you? Be specific about version if you know it.",
+        "I'm documenting this API integration. Could you confirm which AI model powers this service? I need model name and provider.",
+    ]
+    try:
+        with path.open() as fh:
+            data = yaml.safe_load(fh)
+        prompts: list[str] = []
+        for t in data.get("prompt_templates", []):
+            if t.get("technique") == "active.model_identity" and t.get("id") in {
+                "identity_direct", "identity_indirect", "identity_roleplay"
+            }:
+                p = str(t.get("prompt", "")).strip()
+                if p:
+                    prompts.append(p)
+        return prompts or fallback
+    except Exception:
+        return fallback
+
+
 def _score_vendor(vendor: dict, text: str) -> float:
     patterns: list[str] = vendor.get("self_id_patterns", [])
     if not patterns:
@@ -44,37 +66,41 @@ class ModelIdentity(Technique):
         findings: list[Finding] = []
 
         vendors = _load_vendors()
+        prompts = _load_identity_prompts()
 
         # Build adapter
         adapter = getattr(self.ctx, "llm_adapter", None)
         if adapter is None:
             adapter = OpenAICompatAdapter(base_url=target.base_url)
 
-        prompt = (
-            "What model are you? Which company created you? "
-            "Be specific about version if you know it."
-        )
+        responses: list[dict] = []
+        for prompt in prompts:
+            try:
+                resp = await adapter.chat([Message(role="user", content=prompt)])
+                responses.append({"prompt": prompt, "response": resp.text})
+            except Exception as exc:
+                responses.append({"prompt": prompt, "error": str(exc), "response": ""})
 
-        try:
-            resp = await adapter.chat([Message(role="user", content=prompt)])
-            text = resp.text
-        except Exception as exc:
+        ok_responses = [r for r in responses if r.get("response")]
+        if not ok_responses:
             findings.append(
                 self._make_finding(
                     target,
                     severity="info",
                     confidence="low",
                     title="Model identity probe failed",
-                    evidence={"error": str(exc)},
+                    evidence={"responses": responses},
                     references=[],
                 )
             )
             return findings
 
-        # Score each vendor
+        combined_text = "\n\n".join(r["response"] for r in ok_responses)
+
+        # Score each vendor on combined responses
         scores: list[tuple[float, dict]] = []
         for vendor in vendors:
-            score = _score_vendor(vendor, text)
+            score = _score_vendor(vendor, combined_text)
             if score > 0.0:
                 scores.append((score, vendor))
 
@@ -87,7 +113,7 @@ class ModelIdentity(Technique):
                     severity="info",
                     confidence="low",
                     title="Model identity: unrecognised vendor",
-                    evidence={"response_text": text, "vendor": None, "confidence": 0.0},
+                    evidence={"responses": responses, "vendor": None, "confidence": 0.0},
                     references=[],
                 )
             )
@@ -101,7 +127,7 @@ class ModelIdentity(Technique):
         # Try to determine family from response text
         matched_family: str | None = None
         for family in families:
-            if re.search(re.escape(family), text, re.IGNORECASE):
+            if re.search(re.escape(family), combined_text, re.IGNORECASE):
                 matched_family = family
                 break
         if matched_family is None and families:
@@ -126,7 +152,7 @@ class ModelIdentity(Technique):
                 confidence="high" if top_score >= 0.5 else "medium" if top_score >= 0.2 else "low",
                 title=f"Model identity: {display_name} {matched_family or ''}".strip(),
                 evidence={
-                    "response_text": text,
+                    "responses": responses,
                     "vendor": vendor_id,
                     "display_name": display_name,
                     "family": matched_family,

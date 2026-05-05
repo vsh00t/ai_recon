@@ -9,9 +9,11 @@ name: single_endpoint
 description: >
   Minimal profile for testing a single chat endpoint. Only performs essential
   header fingerprinting, health probing, OpenAI compatibility detection,
-  model identity resolution, knowledge cutoff estimation, and basic guardrail
-  checking. Suitable for quick assessments or as a first-pass before running
-  a more comprehensive profile. No repository access or infrastructure probing.
+  model identity resolution, contradiction-based identity confirmation,
+  behavior fingerprinting, knowledge cutoff estimation, context window mapping,
+  and basic guardrail checking. Suitable for quick assessments or as a
+  first-pass before running a more comprehensive profile. No repository access
+  or infrastructure probing.
 intrusiveness_max: low
 
 techniques:
@@ -23,7 +25,10 @@ techniques:
     - active.quick_port_api_sweep
     - active.client_js_endpoint_probe
     - active.model_identity
+    - active.model_contradiction
+    - active.model_behavior
     - active.model_cutoff
+    - active.context_window
     - active.guardrail_probe
 
   disable:
@@ -35,9 +40,6 @@ techniques:
     - active.service_discovery
     - active.status_triage
     - active.gateway_detect
-    - active.model_contradiction
-    - active.model_behavior
-    - active.context_window
     - active.tokenizer_probe
     - active.system_prompt_probe
     - active.rag_boundary
@@ -59,16 +61,27 @@ techniques:
 
 options:
   model_identity:
-    max_attempts: 2
+    max_attempts: 3
     try_contradiction: false
     try_indirect: true
     confidence_threshold: 0.5
 
+  model_contradiction:
+    max_seeds: 3
+
+  model_behavior:
+    run_arithmetic_probe: true
+    run_reasoning_probe: true
+
   model_cutoff:
     event_probes:
       - cutoff_event_2024
+      - cutoff_event_2025
       - cutoff_direct
-    max_probes: 2
+    max_probes: 3
+
+  context_window:
+    max_bisection_steps: 4
 
   guardrail_probe:
     categories:
