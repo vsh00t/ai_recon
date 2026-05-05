@@ -146,7 +146,7 @@ class QuickPortApiSweep(Technique):
                     "models_probe": {},
                     "chat_probes": [],
                     "common_hits": [],
-                    "v1_matrix": [],
+                    "v1_protected_hits": [],
                 }
 
                 # 1) Root/header probe
@@ -254,7 +254,8 @@ class QuickPortApiSweep(Technique):
                         "headers": res["headers"],
                     }
                     v1_matrix.append(row)
-                    port_result["v1_matrix"].append(row)
+                    if res["status"] == 401:
+                        port_result["v1_protected_hits"].append(row)
 
                 per_port_replay.append(port_result)
 
