@@ -97,29 +97,21 @@ class ContextWindow(Technique):
         marker = f"RECON-MARKER-{str(ULID())[:8]}"
         marker_template, recall_template = _load_marker_template(CATALOG_DIR)
 
-        # ── Initial ack ──────────────────────────────────────────────────────
+        # ── Initial ack (optional — probe continues regardless) ──────────────
         intro = marker_template.format(marker=marker)
+        ack_verbatim = False
+        ack_response_snippet = ""
         try:
             ack = await adapter.chat([Message(role="user", content=intro)])
-            if marker not in ack.text:
-                findings.append(
-                    self._make_finding(
-                        target,
-                        severity="info",
-                        confidence="low",
-                        title="Context window probe: model did not acknowledge marker",
-                        evidence={"marker": marker, "ack_response": ack.text[:300]},
-                        references=[],
-                    )
-                )
-                return findings
+            ack_response_snippet = ack.text[:300]
+            ack_verbatim = marker in ack.text
         except Exception as exc:
             findings.append(
                 self._make_finding(
                     target,
                     severity="info",
                     confidence="low",
-                    title="Context window probe failed — could not send initial message",
+                    title="Context window probe: initial message failed — skipping",
                     evidence={"error": str(exc), "marker": marker},
                     references=[],
                 )
@@ -209,6 +201,8 @@ class ContextWindow(Technique):
                 title=title,
                 evidence={
                     "marker": marker,
+                    "ack_verbatim": ack_verbatim,
+                    "ack_response_snippet": ack_response_snippet,
                     "binary_search_results": binary_results,
                     "estimated_tokens": estimated,
                     "lower_bound_tokens": lower_bound,
